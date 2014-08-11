@@ -164,7 +164,7 @@ if __name__ == '__main__':
     selection_strategy='uncertainty'
     
     results = no_reasoning_run(num_trials=10, selection_strategy=selection_strategy, \
-            alpha=1, bootstrap_size=2, balance=True, budget=500, seed=0, Debug=False)
+            alpha=1, bootstrap_size=2, balance=True, budget=1000, seed=0, Debug=False)
     
     save_result(average_results(results), filename='_'.join([selection_strategy, \
         'no_reasoning_result.txt']))

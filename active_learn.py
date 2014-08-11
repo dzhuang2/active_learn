@@ -1,6 +1,7 @@
 from time import time
 import numpy as np
 import argparse
+import pickle
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
 from sklearn.naive_bayes import MultinomialNB
@@ -70,7 +71,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             seed=seed, Debug=Debug)
     elif selection_strategy == 'cover_then_disagree':
         doc_pick_model = CoveringThenDisagreement(feature_expert, instance_model, \
-            feature_model, num_samples, percentage=0.8, y=y_pool, type='unknown', \
+            feature_model, num_samples, percentage=1., y=y_pool, type='unknown', \
             metric='KLD', seed=seed, Debug=Debug)
     else:
         raise ValueError('Selection strategy: \'%s\' invalid!' % selection_strategy)
@@ -194,6 +195,12 @@ def load_dataset(dataset):
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
         X_pool, y_pool, X_test, y_test, X_pool_docs, X_test_docs = \
         load_newsgroups(class1=dataset[1], class2=dataset[2], vectorizer=vect)
+        return (X_pool, y_pool, X_test, y_test)
+    elif dataset == 'SRAA':
+        X_pool = pickle.load(open('SRAA_X_train.pickle', 'rb'))
+        y_pool = pickle.load(open('SRAA_y_train.pickle', 'rb'))
+        X_test = pickle.load(open('SRAA_X_test.pickle', 'rb'))
+        y_test = pickle.load(open('SRAA_y_test.pickle', 'rb'))
         return (X_pool, y_pool, X_test, y_test)
     
 def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smoothing, \
@@ -380,40 +387,31 @@ if __name__ == '__main__':
     python active_learn.py -dataset 20newsgroups alt.atheism talk.religion.misc -strategy cover_then_disagree -metric L1 -trials 10 -bootstrap 0 -budget 500
     '''
 
-#    parser = argparse.ArgumentParser()
-#    parser.add_argument('-dataset', default='imdb', nargs='*', \
-#                        help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
-#    parser.add_argument('-strategy', choices=['random', 'uncertaintyIM', 'uncertaintyFM', \
-#                        'uncertaintyPM', 'disagreement', 'covering', 'covering_fewest', \
-#                        'cheating', 'cover_then_disagree'], \
-#                        help='Document selection strategy to be used')
-#    parser.add_argument('-metric', choices=['mutual_info', 'L1'], \
-#                        help='Specifying the type of feature expert to be used')
-#    parser.add_argument('-c', type=float, default=0.1, help='Penalty term for the L1 feature expert')
-#    parser.add_argument('-debug', action='store_true', help='Enable Debugging')
-#    parser.add_argument('-trials', type=int, default=10, help='Number of trials to run')
-#    parser.add_argument('-seed', type=int, default=0, help='Seed to the random number generator')
-#    parser.add_argument('-bootstrap', type=int, default=2, help='Number of documents to bootstrap')
-#    parser.add_argument('-balance', action='store_true', help='Ensure both classes starts with equal # ' + \
-#                        'of docs after bootstrapping')
-#    parser.add_argument('-budget', type=int, default=250, help='budget in $')
-#    parser.add_argument('-alpha', type=float, default=1, help='alpha for the MultinomialNB instance model')
-#    parser.add_argument('-cost', type=float, default=1, help='cost per document for (class label + feature label)')
-#    parser.add_argument('-smoothing', type=float, default=0, help='smoothing parameter for the feature MNB model')
-#    args = parser.parse_args()
-#
-#    result = run_trials(num_trials=args.trials, dataset=args.dataset, selection_strategy=args.strategy,\
-#                metric=args.metric, C=args.c, alpha=args.alpha, smoothing=args.smoothing, \
-#                bootstrap_size=args.bootstrap, balance=args.balance, budget=args.budget/args.cost, \
-#                seed=args.seed, Debug=args.debug)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-dataset', default='imdb', nargs='*', \
+                        help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
+    parser.add_argument('-strategy', choices=['random', 'uncertaintyIM', 'uncertaintyFM', \
+                        'uncertaintyPM', 'disagreement', 'covering', 'covering_fewest', \
+                        'cheating', 'cover_then_disagree'], \
+                        help='Document selection strategy to be used')
+    parser.add_argument('-metric', choices=['mutual_info', 'L1'], \
+                        help='Specifying the type of feature expert to be used')
+    parser.add_argument('-c', type=float, default=0.1, help='Penalty term for the L1 feature expert')
+    parser.add_argument('-debug', action='store_true', help='Enable Debugging')
+    parser.add_argument('-trials', type=int, default=10, help='Number of trials to run')
+    parser.add_argument('-seed', type=int, default=0, help='Seed to the random number generator')
+    parser.add_argument('-bootstrap', type=int, default=2, help='Number of documents to bootstrap')
+    parser.add_argument('-balance', default=True, action='store_false', help='Ensure both classes starts with equal # of docs after bootstrapping')
+    parser.add_argument('-budget', type=int, default=250, help='budget in $')
+    parser.add_argument('-alpha', type=float, default=1, help='alpha for the MultinomialNB instance model')
+    parser.add_argument('-cost', type=float, default=1, help='cost per document for (class label + feature label)')
+    parser.add_argument('-smoothing', type=float, default=0, help='smoothing parameter for the feature MNB model')
+    args = parser.parse_args()
 
-#    save_result(average_results(result), filename='_'.join([args.strategy, args.metric, 'result.txt']))
-
-    result = run_trials(num_trials=1, dataset=['20newsgroups','alt.atheism','talk.religion.misc'], \
-            selection_strategy='cover_then_disagree', \
-            metric='L1', C=0.1, alpha=1, smoothing=0, \
-            bootstrap_size=0, balance=True, budget=500, \
-            seed=0, Debug=False)
+    result = run_trials(num_trials=args.trials, dataset=args.dataset, selection_strategy=args.strategy,\
+                metric=args.metric, C=args.c, alpha=args.alpha, smoothing=args.smoothing, \
+                bootstrap_size=args.bootstrap, balance=args.balance, budget=args.budget/args.cost, \
+                seed=args.seed, Debug=args.debug)
     
-    save_result(average_results(result), filename='_'.join(['cover_then_disagree', 'L1', 'result.txt']))
+    save_result(average_results(result), filename='_'.join([args.strategy, args.metric, 'result.txt']))
     

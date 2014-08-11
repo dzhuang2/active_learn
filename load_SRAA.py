@@ -13,7 +13,7 @@ def remove_header_subject(text):
     final = sub[0] + "\n" + after
     return final
 
-def load_SRAA(avihome='./SRAA/partion1', percent=0.8, rnd=2342, \
+def load_SRAA(AVI_HOME='./SRAA/partition1/data', percent=1./3, rnd=2342, \
               vect=CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))):
     data = load_files(AVI_HOME, encoding="latin1", load_content=True, random_state=rnd)
     data.data = [remove_header_subject(text) for text in data.data]
@@ -28,5 +28,13 @@ def load_SRAA(avihome='./SRAA/partion1', percent=0.8, rnd=2342, \
 
     X_te = vect.transform(data.test.data)
     y_te = data.test.target
+    
+    # cache the files
+    pickle.dump(X_tr, open('SRAA_X_train.pickle', 'wb'))
+    pickle.dump(y_tr, open('SRAA_y_train.pickle', 'wb'))
+    pickle.dump(X_te, open('SRAA_X_test.pickle', 'wb'))
+    pickle.dump(y_te, open('SRAA_y_test.pickle', 'wb'))
+    pickle.dump(data.train.data, open('SRAA_X_train_corpus.pickle', 'wb'))
+    pickle.dump(data.test.data, open('SRAA_X_test_corpus.pickle', 'wb'))
     
     return (X_tr, y_tr, X_te, y_te, data.train.data, data.test.data)

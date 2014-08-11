@@ -28,14 +28,13 @@ class FeatureMNB(MultinomialNB):
 
         self.feature_log_prob_ = np.zeros(shape=(2,self.num_features))
 
-        # Equation 12
-        self.feature_log_prob_[0][self.class0_features] = np.log(1./(n0+n1))
-        self.feature_log_prob_[1][self.class1_features] = np.log(1./(n0+n1))
-
-        #Equation 13
-        self.feature_log_prob_[1][self.class0_features] = np.log(1./((n0+n1)*self.r))
-        self.feature_log_prob_[0][self.class1_features] = np.log(1./((n0+n1)*self.r))
-
+        if self.class0_features != []:
+            self.feature_log_prob_[0][self.class0_features] = np.log(1./(n0+n1)) # Equation 12
+            self.feature_log_prob_[1][self.class0_features] = np.log(1./((n0+n1)*self.r)) # Equation 13
+        elif self.class1_features != []:
+            self.feature_log_prob_[1][self.class1_features] = np.log(1./(n0+n1)) # Equation 12
+            self.feature_log_prob_[0][self.class1_features] = np.log(1./((n0+n1)*self.r)) # Equation 13
+        
         #Equation 14
         self.feature_log_prob_[0][unlabeled_features] = np.log((n1*(1-1./self.r))/((n0+n1)*nu))
         self.feature_log_prob_[1][unlabeled_features] = np.log((n0*(1-1./self.r))/((n0+n1)*nu))

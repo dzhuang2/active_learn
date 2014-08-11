@@ -85,13 +85,6 @@ def load_newsgroups(class1, class2, shuffle=False, random_state=42, remove=('hea
     print "Loading the 20 newsgroup data..."
     cats = [class1, class2]
     newsgroups_train = fetch_20newsgroups(subset='train', remove=remove, categories=cats)
-    
-    for doc in range(10):
-        print '-' * 50
-        print 'Document #%d:' % doc
-        print '=' * 50
-        print newsgroups_train.data[doc]
-        
     newsgroups_test = fetch_20newsgroups(subset='test', remove=remove, categories=cats)
     print "Data loaded."
     
@@ -165,4 +158,4 @@ def load_newsgroups(class1, class2, shuffle=False, random_state=42, remove=('hea
         test_corpus_shuffled = test_corpus
     
     return X_train, y_train, X_test, y_test, train_corpus_shuffled, test_corpus_shuffled
-    
+

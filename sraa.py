@@ -4,8 +4,6 @@ from sklearn.datasets import base as bunch
 from sklearn.datasets import load_files
 from time import time
 import pickle
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def remove_header_subject(text):
     """

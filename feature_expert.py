@@ -183,7 +183,7 @@ def print_all_features(feature_names, feature_expert, top_n, doc, X, y, X_text):
     print 'Feature Expert Positive Top(%d): %s' % (top_n, ', '.join(top_n_class1_features_str))
     
 def check_feature_expert(dataset='imdb', metric='mutual_info', top_n=10, smoothing=1e-6, C=0.1, \
-                         vect=CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))):
+                         vect=CountVectorizer(min_df=5, max_df=1.0, binary=False)):
     class_label = {0:'negative', 1:'positive'}
     if isinstance(dataset, str) and dataset == 'imdb':
         X_pool, y_pool, X_test, y_test, X_pool_docs, X_test_docs = load_imdb("./aclImdb", shuffle=True, vectorizer=vect)

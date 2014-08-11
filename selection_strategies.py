@@ -43,7 +43,7 @@ def RandomBootstrap(X_pool, y_pool, size, balance, seed=0):
         training_set = np.hstack((class0_docs, class1_docs))
         
     else: # otherwise, pick 'size' documents randomly
-        training_set = np.random.permutation(np.arange(poolsize))[:size]
+        training_set = np.random.permutation(pool_set)[:size]
     
     pool_set = np.setdiff1d(pool_set, training_set)
     
