@@ -30,6 +30,25 @@ def load_imdb(path, shuffle=True, random_state=42, \
         y_train.append(1)
         f.close()
     
+    test_neg_files = glob.glob(path+"/test/neg/*.txt")
+    test_pos_files = glob.glob(path+"/test/pos/*.txt")
+    
+    test_corpus = []
+    
+    y_test = []
+    
+    for tnf in test_neg_files:
+        f = open(tnf, 'r')
+        test_corpus.append(f.read())
+        y_test.append(0)
+        f.close()
+    
+    for tpf in test_pos_files:
+        f = open(tpf, 'r')
+        test_corpus.append(f.read())
+        y_test.append(1)
+        f.close()
+    
     print "Data loaded."
     
     print "Extracting features from the training dataset using a sparse vectorizer"

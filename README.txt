@@ -20,6 +20,8 @@ Readme
 
 'learning_util.py' contains code that I thought was needed during coding but moved to this file due to deprecation.  NO other file imports this one.
 
+'explore_cover.py' contains the exploratory code for covering analysis.
 
+'FM_explore.py' contains the alternative version of feature_expert which I plan on integrating to feature_expert very soon to keep all the feature_expert stuff in one place.
 
 
