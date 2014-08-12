@@ -11,11 +11,11 @@ def IM_explore(num_trials, dataset, bootstrap_size=0, balance=True, budget=500, 
     
     (X_pool, y_pool, X_test, y_test) = load_dataset(dataset)
     
-    # models = {'MultinomialNB(alpha=1)':MultinomialNB(alpha=1), \
-              # 'LogisticRegression(C=0.1, penalty=\'l1\')':LogisticRegression(C=0.1, penalty='l1'), \
-              # 'LogisticRegression(C=1, penalty=\'l1\')':LogisticRegression(C=1, penalty='l1')}
+    models = {'MultinomialNB(alpha=1)':MultinomialNB(alpha=1), \
+              'LogisticRegression(C=0.1, penalty=\'l1\')':LogisticRegression(C=0.1, penalty='l1'), \
+              'LogisticRegression(C=1, penalty=\'l1\')':LogisticRegression(C=1, penalty='l1')}
               
-    models = {'LogisticRegression(C=0.1, penalty=\'l1\')':LogisticRegression(C=0.1, penalty='l1')}
+    # models = {'LogisticRegression(C=0.1, penalty=\'l1\')':LogisticRegression(C=0.1, penalty='l1')}
 
     print sep
     print 'Instance Model Performance Evaluation'
@@ -35,9 +35,9 @@ def IM_explore(num_trials, dataset, bootstrap_size=0, balance=True, budget=500, 
             training_set, pool_set = RandomBootstrap(X_pool, y_pool, bootstrap_size, balance, trial_seed)
             
             result[i] = no_reasoning_learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, \
-                'random', budget, models[model], trial_seed, Debug)
+                'random', budget, models[model], trial_seed, Debug=Debug)
             
-            save_result(result[i], filename='_'.join([dataset, 'trial'+str(i), 'result.txt']))
+            # save_result(result[i], filename='_'.join([dataset, 'trial'+str(i), 'result.txt']))
         
         if isinstance(dataset, list):
             name = '_'.join(dataset)
@@ -47,8 +47,10 @@ def IM_explore(num_trials, dataset, bootstrap_size=0, balance=True, budget=500, 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-dataset', default='imdb', nargs='?', \
+    parser.add_argument('-dataset', default='imdb', \
                         help='Dataset to be used: [\'imdb\', \'SRAA\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
+    parser.add_argument('-cat', default=['alt.atheism', 'talk.religion.misc'], nargs=2, \
+                        help='2 class labels from the 20newsgroup dataset')
     parser.add_argument('-trials', type=int, default=10, help='Number of trials to run')
     parser.add_argument('-seed', type=int, default=28, help='Seed to the random number generator')
     parser.add_argument('-bootstrap', type=int, default=2, help='Number of documents to bootstrap')
@@ -56,4 +58,9 @@ if __name__ == '__main__':
     parser.add_argument('-budget', type=int, default=500, help='budget in $')
     args = parser.parse_args()
     
-    IM_explore(num_trials=args.trials, dataset=args.dataset, bootstrap_size=args.bootstrap, budget=args.budget, seed=args.seed)
+    if args.dataset == '20newsgroups':
+        dataset = [args.dataset, args.cat[0], args.cat[1]]
+    else:
+        dataset = args.dataset
+    
+    IM_explore(num_trials=args.trials, dataset=dataset, bootstrap_size=args.bootstrap, budget=args.budget, seed=args.seed)

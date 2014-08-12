@@ -35,9 +35,11 @@ class feature_expert(object):
         if metric == 'mutual_info':
             self.feature_rank = self.rank_by_mutual_information(X, y)
         elif metric == 'L1':
+            self.feature_rank = self.L1_rank(C, X, y)
+        elif metric == 'L1-count':
             self.feature_rank = self.rank_by_L1_weights(C, X, y)
         else:
-            raise ValueError('metric must be one of the following: \'mutual_info\', \'L1\'')
+            raise ValueError('metric must be one of the following: \'mutual_info\', \'L1\', \'L1-count\'')
         
         print 'Feature Expert has deemed %d words to be of label 0' % len(self.feature_rank[0])
         print 'Feature Expert has deemed %d words to be of label 1' % len(self.feature_rank[1])
@@ -71,6 +73,19 @@ class feature_expert(object):
         feature_rank = np.argsort(self.feature_mi_scores)[::-1]
 
         return self.classify_features(feature_rank)
+    
+    def L1_rank(self, C, X, y):
+        clf_l1 = linear_model.LogisticRegression(C=C, penalty='l1')
+        clf_l1.fit(X, y)
+        self.L1_weights = clf_l1.coef_[0]
+        
+        class0_features = np.nonzero(self.L1_weights < 0)[0]
+        class1_features = np.nonzero(self.L1_weights > 0)[0]
+        class0_features_ranked = class0_features[np.argsort(self.L1_weights[class0_features])]
+        class1_features_ranked = class1_features[np.argsort(self.L1_weights[class1_features])[::-1]]
+        feature_rank = (class0_features_ranked, class1_features_ranked)
+        
+        return feature_rank
     
     def rank_by_L1_weights(self, C, X, y):
         clf_l1 = linear_model.LogisticRegression(C=C, penalty='l1')
