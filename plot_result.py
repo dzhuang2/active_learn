@@ -29,11 +29,14 @@ def plot_all_results():
             print 'model: %s, type: %s' % (model, type)
             plot_model(results, models[model], type, plot_label, '# of training samples', types[type])
 
-def plot_explore_results():
+def plot_explore_results(dataset_name):
     types = {'accu':'Accuracy', 'auc':'AUC'}
-    result_files = ['SRAA_MultinomialNB(alpha=1)_result.txt', \
-                'SRAA_LogisticRegression(C=0.1, penalty=\'l1\')_result.txt', \
-                'SRAA_LogisticRegression(C=1, penalty=\'l1\')_result.txt']
+    result_strs = ['_MultinomialNB(alpha=1)_result.txt', \
+                '_LogisticRegression(C=0.1, penalty=\'l1\')_result.txt', \
+                '_LogisticRegression(C=1, penalty=\'l1\')_result.txt']
+    
+    result_files = [dataset_name + str for str in result_strs]
+
     plot_label = ['MNB', 'LR-C0.1', 'LR-C1']
     results = np.ndarray(len(result_files), dtype=object)
     num_training_set = np.ndarray(len(result_files), dtype=object)
@@ -104,6 +107,7 @@ if __name__ == '__main__':
             plot(*load_result(sys.argv[1]))
     elif len(sys.argv) == 3 and sys.argv[1] == 'compare':
         compare_results(cost=float(sys.argv[2]))
+    elif len(sys.argv) == 3 and sys.argv[1] == 'explore':
+        plot_explore_results(sys.argv[2])
     else:
-        # plot_all_results()
-        plot_explore_results()
+        plot_all_results()

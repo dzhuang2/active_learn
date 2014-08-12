@@ -1,5 +1,6 @@
 from time import time
 import numpy as np
+import pickle
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
 from sklearn.naive_bayes import MultinomialNB
@@ -105,6 +106,13 @@ def no_reasoning_learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, \
         # Choose a document based on the strategy chosen
         doc_id = doc_pick_model.choice(X_pool, pool_set)
         
+        if Debug:
+            print 'document #%d is chosen' % doc_id
+            print 'pre-selection'
+            print X_train.shape
+            pickle.dump(X_train, open('X_train_old.pickle', 'wb'))
+            pickle.dump(y_train, open('y_train_old.pickle', 'wb'))
+        
         # Remove the chosen document from pool and add it to the training set
         pool_set.remove(doc_id)
         training_set.append(doc_id)
@@ -113,11 +121,24 @@ def no_reasoning_learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, \
             X_train = X_pool[doc_id]
             y_train = np.array([y_pool[doc_id]])
         else:
-            X_train=sp.vstack((X_train, X_pool[doc_id]))
-            y_train=np.hstack((y_train, np.array([y_pool[doc_id]])))
+            X_train = X_pool[training_set]
+            y_train = y_pool[training_set]
+        
+        if Debug:
+            print 'post-selection'
+            print X_train.shape
+            old_coef_ = instance_model.coef_
+            pickle.dump(X_train, open('X_train_new.pickle', 'wb'))
+            pickle.dump(y_train, open('y_train_new.pickle', 'wb'))
         
         # Update the instance model
         instance_model.fit(X_train, y_train)
+        
+        if Debug:
+            new_coef_ = instance_model.coef_
+            if (old_coef_ == new_coef_).all():
+                print 'coefficients are the same before and after the document is added to the training set!'
+                raise ValueError('Early Termination!')
         
         # Evaluate model
         (accu, auc) = evaluate_model(instance_model, X_test, y_test)
