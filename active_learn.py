@@ -89,7 +89,9 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         
         for doc in training_set:
             feature = feature_expert.most_informative_feature(X_pool[doc], y_pool[doc])
-            feature_model.fit(feature, y_pool[doc]) # train feature_model one by one
+            
+            if feature:
+                feature_model.fit(feature, y_pool[doc]) # train feature_model one by one
             
             if selection_strategy == 'covering' or selection_strategy == 'covering_fewest':
                 doc_pick_model.update(X_pool, feature)
@@ -147,7 +149,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         instance_model.fit(X_train, y_train)
         
         # Update the feature model
-        feature_model.fit(feature, label)
+        if feature:
+            feature_model.fit(feature, label)
         
         # Update the pooling model
         pooling_model.fit(instance_model, feature_model, weights=[0.5, 0.5])
