@@ -31,7 +31,8 @@ class FeatureMNB(MultinomialNB):
         if self.class0_features != []:
             self.feature_log_prob_[0][self.class0_features] = np.log(1./(n0+n1)) # Equation 12
             self.feature_log_prob_[1][self.class0_features] = np.log(1./((n0+n1)*self.r)) # Equation 13
-        elif self.class1_features != []:
+        
+        if self.class1_features != []:
             self.feature_log_prob_[1][self.class1_features] = np.log(1./(n0+n1)) # Equation 12
             self.feature_log_prob_[0][self.class1_features] = np.log(1./((n0+n1)*self.r)) # Equation 13
         
