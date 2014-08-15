@@ -18,7 +18,11 @@ def label_agnostic_covering(X, feature_rank):
     and how many documents do not have any useful feature.
     
     feature_rank contains the ids for the useful features,
-    in decreasing order of usefulness 
+    in decreasing order of usefulness.
+    
+    This code assumes that the features are discovered in the order
+    of importance. In reality, a feature is discovered when a document
+    in which it is the top feature is presented to the expert.
     '''
     
     feature_cover_counts = {}
