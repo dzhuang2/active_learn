@@ -46,6 +46,11 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     instance_model_scores = {'auc':[], 'accu':[]}
     feature_model_scores = {'auc':[], 'accu':[]}
     pooling_model_scores = {'auc':[], 'accu':[]}
+        
+    discovered_feature_counts = {'class0':[], 'class1': []}
+    num_docs_covered = []    
+    covered_docs = set()    
+    X_pool_csc = X_pool.tocsc()
     
     num_samples = len(pool_set) + len(training_set)
     
@@ -93,6 +98,11 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             if feature:
                 feature_model.fit(feature, y_pool[doc]) # train feature_model one by one
             
+            # docs covered            
+            if feature:
+                f_covered_docs = X_pool_csc[:, feature].indices
+                covered_docs.update(f_covered_docs)
+            
             if selection_strategy == 'covering' or selection_strategy == 'covering_fewest':
                 doc_pick_model.update(X_pool, feature)
             elif selection_strategy == 'cheating':
@@ -113,6 +123,12 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         (accu, auc) = evaluate_model(pooling_model, X_test, y_test)
         pooling_model_scores['auc'].append(auc)
         pooling_model_scores['accu'].append(accu)
+        
+        # discovered feature counts
+        discovered_feature_counts['class0'].append(len(feature_model.class0_features))
+        discovered_feature_counts['class1'].append(len(feature_model.class1_features))
+        
+        num_docs_covered.append(len(covered_docs))          
     
     else:
         if selection_strategy.startswith('uncertainty') or selection_strategy == 'disagreement':
@@ -152,6 +168,11 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         if feature:
             feature_model.fit(feature, label)
         
+        # docs covered
+        if feature:
+            f_covered_docs = X_pool_csc[:, feature].indices
+            covered_docs.update(f_covered_docs)
+        
         # Update the pooling model
         pooling_model.fit(instance_model, feature_model, weights=[0.5, 0.5])
         
@@ -176,6 +197,13 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         (accu, auc) = evaluate_model(pooling_model, X_test, y_test)
         pooling_model_scores['auc'].append(auc)
         pooling_model_scores['accu'].append(accu)
+        
+        # discovered feature counts
+        discovered_feature_counts['class0'].append(len(feature_model.class0_features))
+        discovered_feature_counts['class1'].append(len(feature_model.class1_features))
+        
+        # docs covered        
+        num_docs_covered.append(len(covered_docs))
     
     if isinstance(doc_pick_model, CoveringThenDisagreement):
         print 'covering transition happens at sample #%d' % doc_pick_model.transition
@@ -188,7 +216,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     
     print 'Active Learning took %2.2fs' % (time() - start)
     
-    return (num_training_samples, instance_model_scores, feature_model_scores, pooling_model_scores)
+    return (num_training_samples, instance_model_scores, feature_model_scores, pooling_model_scores, discovered_feature_counts, num_docs_covered)
 
 def load_dataset(dataset):
     if dataset == 'imdb':
@@ -239,13 +267,16 @@ def average_results(result):
     avg_FM_scores = dict()
     avg_PM_scores = dict()
     
+    avg_discovered_feature_counts = dict()
+    num_docs_covered = []
+    
     num_trials = result.shape[0]
     
     if num_trials == 1:
         return result[0]    
     
     for i in range(num_trials):
-        num_training_set, IM_scores, FM_scores, PM_scores = result[i]
+        num_training_set, IM_scores, FM_scores, PM_scores, feature_counts, covered_docs = result[i]
         if i == 0:
             avg_IM_scores['accu'] = np.array(IM_scores['accu'])
             avg_IM_scores['auc'] = np.array(IM_scores['auc'])
@@ -253,6 +284,9 @@ def average_results(result):
             avg_FM_scores['auc'] = np.array(FM_scores['auc'])
             avg_PM_scores['accu'] = np.array(PM_scores['accu'])
             avg_PM_scores['auc'] = np.array(PM_scores['auc'])
+            avg_discovered_feature_counts['class0'] = np.array(feature_counts['class0'])
+            avg_discovered_feature_counts['class1'] = np.array(feature_counts['class1'])
+            num_docs_covered = np.array(covered_docs)
         else:
             avg_IM_scores['accu'] += np.array(IM_scores['accu'])
             avg_IM_scores['auc'] += np.array(IM_scores['auc'])
@@ -260,6 +294,9 @@ def average_results(result):
             avg_FM_scores['auc'] += np.array(FM_scores['auc'])
             avg_PM_scores['accu'] += np.array(PM_scores['accu'])
             avg_PM_scores['auc'] += np.array(PM_scores['auc'])
+            avg_discovered_feature_counts['class0'] += np.array(feature_counts['class0'])
+            avg_discovered_feature_counts['class1'] += np.array(feature_counts['class1'])
+            num_docs_covered += np.array(covered_docs)
             
     avg_IM_scores['accu'] = avg_IM_scores['accu'] / num_trials
     avg_IM_scores['auc'] = avg_IM_scores['auc'] / num_trials
@@ -267,8 +304,11 @@ def average_results(result):
     avg_FM_scores['auc'] = avg_FM_scores['auc'] / num_trials
     avg_PM_scores['accu'] = avg_PM_scores['accu'] / num_trials
     avg_PM_scores['auc'] = avg_PM_scores['auc'] / num_trials
+    avg_discovered_feature_counts['class0'] = avg_discovered_feature_counts['class0'] / float(num_trials)
+    avg_discovered_feature_counts['class1'] = avg_discovered_feature_counts['class1'] / float(num_trials)
+    num_docs_covered = num_docs_covered / float(num_trials)
     
-    return (num_training_set, avg_IM_scores, avg_FM_scores, avg_PM_scores)
+    return (num_training_set, avg_IM_scores, avg_FM_scores, avg_PM_scores, avg_discovered_feature_counts, num_docs_covered)
 
 def plot(num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores):
     axes_params = [0.1, 0.1, 0.58, 0.75]
@@ -342,19 +382,29 @@ def save_result(result, filename='result.txt'):
     print '-' * 50
     print 'saving result into \'%s\'' % filename
     with open(filename, 'w') as f:
-        num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores = result
+        num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores, feature_counts, covered_docs = result
+        
         f.write(nparray_tostr(num_training_set))
+        
         f.write(nparray_tostr(instance_model_scores['accu']))
         f.write(nparray_tostr(feature_model_scores['accu']))
         f.write(nparray_tostr(pooling_model_scores['accu']))
+        
         f.write(nparray_tostr(instance_model_scores['auc']))
         f.write(nparray_tostr(feature_model_scores['auc']))
         f.write(nparray_tostr(pooling_model_scores['auc']))
+        
+        f.write(nparray_tostr(feature_counts['class0']))
+        f.write(nparray_tostr(feature_counts['class1']))
+        
+        f.write(nparray_tostr(covered_docs))
 
 def nparray_tostr(array):
     return ' '.join([str(val) for val in array]) + '\n'
         
 def load_result(filename='result.txt'):
+    # This file currently loads only the accuracies and aucs. The discovered feature counts
+    # and number of covered documents is not loaded.
     instance_model_scores = dict()
     feature_model_scores = dict()
     pooling_model_scores = dict()
@@ -395,9 +445,9 @@ if __name__ == '__main__':
                         help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
     parser.add_argument('-strategy', choices=['random', 'uncertaintyIM', 'uncertaintyFM', \
                         'uncertaintyPM', 'disagreement', 'covering', 'covering_fewest', \
-                        'cheating', 'cover_then_disagree'], \
+                        'cheating', 'cover_then_disagree'], default='random', \
                         help='Document selection strategy to be used')
-    parser.add_argument('-metric', choices=['mutual_info', 'L1'], \
+    parser.add_argument('-metric', choices=['mutual_info', 'L1'], default="L1", \
                         help='Specifying the type of feature expert to be used')
     parser.add_argument('-c', type=float, default=0.1, help='Penalty term for the L1 feature expert')
     parser.add_argument('-debug', action='store_true', help='Enable Debugging')
