@@ -1,9 +1,14 @@
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.datasets import fetch_20newsgroups
 from time import time
 import glob
 import numpy as np
 from sklearn import linear_model
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.datasets import fetch_20newsgroups
+from sklearn.datasets import load_svmlight_file
+from sklearn.cross_validation import train_test_split, ShuffleSplit
+
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 def load_imdb(path, shuffle=True, random_state=42, \
               vectorizer = CountVectorizer(min_df=2, max_df=1.0, binary=False)):
@@ -178,3 +183,23 @@ def load_newsgroups(class1, class2, shuffle=False, random_state=42, remove=('hea
     
     return X_train, y_train, X_test, y_test, train_corpus_shuffled, test_corpus_shuffled
 
+def load_nova(filepath='./nova/nova.dat', n_features=16969, test_split=1./3, shuffle=True, rnd=3439):
+     
+    print '-' * 50
+    print "Loading the NOVA dataset..."
+    t0 = time()
+
+    X_pool, y_pool = load_svmlight_file(filepath, n_features)
+
+    duration = time() - t0
+    print "Loading took %0.2fs." % duration
+    
+    y_pool[y_pool==-1] = 0
+    indices = ShuffleSplit(X_pool.shape[0], n_iter=1, test_size=test_split, indices=True, random_state=rnd)
+    for train_ind, test_ind in indices:
+        X_train = X_pool[train_ind]
+        y_train = y_pool[train_ind]
+        X_test = X_pool[test_ind]
+        y_test = y_pool[test_ind]
+    
+    return (X_train, y_train, X_test, y_test)

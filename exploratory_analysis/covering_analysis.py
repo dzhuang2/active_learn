@@ -5,11 +5,10 @@ Covering analysis for the features
 '''
 
 import numpy as np
-
+import argparse
+import pickle
 from sklearn.linear_model import LogisticRegression
-
-from imdb import load_imdb, load_newsgroups
-
+from imdb import load_newsgroups, load_nova
 from sklearn.feature_extraction.text import CountVectorizer
 
 def label_agnostic_covering(X, feature_rank):
@@ -51,14 +50,29 @@ def label_agnostic_covering(X, feature_rank):
     return feature_cover_counts, uncovered_docs
 
 if __name__ == '__main__':
-    
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-dataset', default='imdb', nargs='*', \
+                    help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
+    args = parser.parse_args()
     vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
     
-    #X_pool, y_pool, _, _, _, _ = load_imdb("../aclImdb", shuffle=True, vectorizer=vect)
-     
-    X_pool, y_pool, _, _, _, _ = load_newsgroups("alt.atheism", "talk.religion.misc", shuffle=True, vectorizer=vect)
-            
-    feature_names = vect.get_feature_names()
+    if args.dataset == ['imdb']:
+        X_pool, y_pool, _, _, _, _ = load_imdb("../aclImdb", shuffle=True, vectorizer=vect)
+    elif len(args.dataset) == 3 and args.dataset[0] == '20newsgroups':
+        X_pool, y_pool, _, _, _, _ = load_newsgroups(args.dataset[1], args.dataset[2], shuffle=True, vectorizer=vect)
+    elif args.dataset == ['SRAA']:
+        X_pool = pickle.load(open('SRAA_X_train.pickle', 'rb'))
+        y_pool = pickle.load(open('SRAA_y_train.pickle', 'rb'))
+    elif args.dataset == ['nova']:
+        X_pool, y_pool, _, _, = load_nova()
+    else:
+        raise ValueError('Invalid Dataset!')
+    
+    if args.dataset != ['SRAA'] and args.dataset != ['nova']:
+        feature_names = vect.get_feature_names()
+    elif args.dataset == ['SRAA']:
+        feature_names = pickle.load(open('SRAA_feature_names.pickle', 'rb'))
+    # Note: nova dataset has no feature_names
 
     clf_l1 = LogisticRegression(penalty='l1', C=0.1)
     clf_l1.fit(X_pool, y_pool)

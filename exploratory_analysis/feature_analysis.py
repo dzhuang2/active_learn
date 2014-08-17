@@ -17,7 +17,7 @@ from active_learn import load_dataset
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-dataset', default='imdb', nargs='*', \
+    parser.add_argument('-dataset', default=['imdb'], nargs='*', \
                         help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
     parser.add_argument('-c', type=float, default=0.1, help='Penalty term for the L1 feature expert')
     args = parser.parse_args()

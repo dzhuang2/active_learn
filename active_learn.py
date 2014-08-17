@@ -6,7 +6,7 @@ import scipy.sparse as sp
 import matplotlib.pyplot as plt
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.feature_extraction.text import CountVectorizer
-from imdb import load_imdb, load_newsgroups
+from imdb import load_imdb, load_newsgroups, load_nova
 from models import FeatureMNB, PoolingMNB
 from sklearn import metrics
 from sklearn.datasets import load_svmlight_file
@@ -219,7 +219,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     return (num_training_samples, instance_model_scores, feature_model_scores, pooling_model_scores, discovered_feature_counts, num_docs_covered)
 
 def load_dataset(dataset):
-    if dataset == 'imdb':
+    if dataset == ['imdb']:
         (X_pool, y_pool, X_test, y_test) = load_data()
         return (X_pool, y_pool, X_test, y_test)
     elif isinstance(dataset, list) and len(dataset) == 3 and dataset[0] == '20newsgroups':
@@ -227,11 +227,14 @@ def load_dataset(dataset):
         X_pool, y_pool, X_test, y_test, X_pool_docs, X_test_docs = \
         load_newsgroups(class1=dataset[1], class2=dataset[2], vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test)
-    elif dataset == 'SRAA':
+    elif dataset == ['SRAA']:
         X_pool = pickle.load(open('SRAA_X_train.pickle', 'rb'))
         y_pool = pickle.load(open('SRAA_y_train.pickle', 'rb'))
         X_test = pickle.load(open('SRAA_X_test.pickle', 'rb'))
         y_test = pickle.load(open('SRAA_y_test.pickle', 'rb'))
+        return (X_pool, y_pool, X_test, y_test)
+    elif dataset == ['nova']:
+        (X_pool, y_pool, X_test, y_test) = load_nova()
         return (X_pool, y_pool, X_test, y_test)
     
 def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smoothing, \
