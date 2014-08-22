@@ -36,7 +36,7 @@ def load_data(pool_filename='./aclImdb/imdb-binary-pool-mindf5-ng11.bak', \
     return (X_pool, y_pool, X_test, y_test)
 
 def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert, \
-          selection_strategy, budget, instance_model, feature_model, \
+          selection_strategy, coverage, budget, instance_model, feature_model, \
           pooling_model, seed=0, Debug=False):
     
     start = time()
@@ -76,7 +76,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             seed=seed, Debug=Debug)
     elif selection_strategy == 'cover_then_disagree':
         doc_pick_model = CoveringThenDisagreement(feature_expert, instance_model, \
-            feature_model, num_samples, percentage=1., y=y_pool, type='unknown', \
+            feature_model, num_samples, percentage=coverage, y=y_pool, type='unknown', \
             metric='KLD', seed=seed, Debug=Debug)
     else:
         raise ValueError('Selection strategy: \'%s\' invalid!' % selection_strategy)
@@ -128,7 +128,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         discovered_feature_counts['class0'].append(len(feature_model.class0_features))
         discovered_feature_counts['class1'].append(len(feature_model.class1_features))
         
-        num_docs_covered.append(len(covered_docs))          
+        num_docs_covered.append(len(covered_docs))
     
     else:
         if selection_strategy.startswith('uncertainty') or selection_strategy == 'disagreement':
@@ -206,7 +206,10 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         num_docs_covered.append(len(covered_docs))
     
     if isinstance(doc_pick_model, CoveringThenDisagreement):
+        transition = doc_pick_model.transition
         print 'covering transition happens at sample #%d' % doc_pick_model.transition
+    else:
+        transition = None
     
     # compute the # of training samples for plot
     if training_set_empty:
@@ -216,14 +219,14 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     
     print 'Active Learning took %2.2fs' % (time() - start)
     
-    return (num_training_samples, instance_model_scores, feature_model_scores, pooling_model_scores, discovered_feature_counts, num_docs_covered)
+    return (num_training_samples, instance_model_scores, feature_model_scores, pooling_model_scores, discovered_feature_counts, num_docs_covered, transition)
 
 def load_dataset(dataset):
     if dataset == ['imdb']:
         (X_pool, y_pool, X_test, y_test) = load_data()
         return (X_pool, y_pool, X_test, y_test)
     elif isinstance(dataset, list) and len(dataset) == 3 and dataset[0] == '20newsgroups':
-        vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
+        vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 3))
         X_pool, y_pool, X_test, y_test, X_pool_docs, X_test_docs = \
         load_newsgroups(class1=dataset[1], class2=dataset[2], vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test)
@@ -238,7 +241,7 @@ def load_dataset(dataset):
         return (X_pool, y_pool, X_test, y_test)
     
 def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smoothing, \
-                bootstrap_size, balance, budget, seed=0, Debug=False):
+                bootstrap_size, balance, coverage, budget, seed=0, Debug=False):
     
     (X_pool, y_pool, X_test, y_test) = load_dataset(dataset)    
     fe = feature_expert(X_pool, y_pool, metric, smoothing=1e-6, C=C)
@@ -261,7 +264,7 @@ def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smooth
             training_set, pool_set = RandomBootstrap(X_pool, y_pool, bootstrap_size, balance, trial_seed)
         
         result[i] = learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, \
-            fe, selection_strategy, budget, instance_model, feature_model, pooling_model, trial_seed, Debug)
+            fe, selection_strategy, coverage, budget, instance_model, feature_model, pooling_model, trial_seed, Debug)
     
     return result
 
@@ -276,10 +279,12 @@ def average_results(result):
     num_trials = result.shape[0]
     
     if num_trials == 1:
-        return result[0]    
+        return result[0]
+    
+    ls_transitions = []
     
     for i in range(num_trials):
-        num_training_set, IM_scores, FM_scores, PM_scores, feature_counts, covered_docs = result[i]
+        num_training_set, IM_scores, FM_scores, PM_scores, feature_counts, covered_docs, transition = result[i]
         if i == 0:
             avg_IM_scores['accu'] = np.array(IM_scores['accu'])
             avg_IM_scores['auc'] = np.array(IM_scores['auc'])
@@ -300,6 +305,8 @@ def average_results(result):
             avg_discovered_feature_counts['class0'] += np.array(feature_counts['class0'])
             avg_discovered_feature_counts['class1'] += np.array(feature_counts['class1'])
             num_docs_covered += np.array(covered_docs)
+        
+        ls_transitions.append(transition)
             
     avg_IM_scores['accu'] = avg_IM_scores['accu'] / num_trials
     avg_IM_scores['auc'] = avg_IM_scores['auc'] / num_trials
@@ -311,7 +318,12 @@ def average_results(result):
     avg_discovered_feature_counts['class1'] = avg_discovered_feature_counts['class1'] / float(num_trials)
     num_docs_covered = num_docs_covered / float(num_trials)
     
-    return (num_training_set, avg_IM_scores, avg_FM_scores, avg_PM_scores, avg_discovered_feature_counts, num_docs_covered)
+    if len(ls_transitions) != result.shape[0]:
+        raise ValueError('Something is wrong with the transition numbers')
+    if ls_transitions == [[] for i in range(result.shape[0])]:
+        ls_transitions = []
+    
+    return np.array([(num_training_set, avg_IM_scores, avg_FM_scores, avg_PM_scores, avg_discovered_feature_counts, num_docs_covered, ls_transitions)])
 
 def plot(num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores):
     axes_params = [0.1, 0.1, 0.58, 0.75]
@@ -382,25 +394,38 @@ def full_knowledge(dataset, metric='mutual_info', C=0.1, alpha=1, smoothing=0):
     print 'Pooled Model: auc = %f, accu = %f' % (auc, accu)
 
 def save_result(result, filename='result.txt'):
+    # Saves the data the following order:
+    # training sample index, IM_accu, FM_accu, PM_accu, IM_acu, FM_auc, PM_auc, c0_features_discovered so far,
+    # c1_features_discovered so far, num_docs_covered, and transition phases for cover_then_disagree approach
+    # if the approach is not cover_then_disagree, no transition is saved
     print '-' * 50
     print 'saving result into \'%s\'' % filename
+    
+    ls_transitions = []
     with open(filename, 'w') as f:
-        num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores, feature_counts, covered_docs = result
+        for i in range(result.shape[0]):
+            num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores, feature_counts, covered_docs, transition = result[i]
+            
+            f.write(nparray_tostr(num_training_set))
+            
+            f.write(nparray_tostr(instance_model_scores['accu']))
+            f.write(nparray_tostr(feature_model_scores['accu']))
+            f.write(nparray_tostr(pooling_model_scores['accu']))
+            
+            f.write(nparray_tostr(instance_model_scores['auc']))
+            f.write(nparray_tostr(feature_model_scores['auc']))
+            f.write(nparray_tostr(pooling_model_scores['auc']))
+            
+            f.write(nparray_tostr(feature_counts['class0']))
+            f.write(nparray_tostr(feature_counts['class1']))
+            
+            f.write(nparray_tostr(covered_docs))
+            ls_transitions.append(transition)
         
-        f.write(nparray_tostr(num_training_set))
-        
-        f.write(nparray_tostr(instance_model_scores['accu']))
-        f.write(nparray_tostr(feature_model_scores['accu']))
-        f.write(nparray_tostr(pooling_model_scores['accu']))
-        
-        f.write(nparray_tostr(instance_model_scores['auc']))
-        f.write(nparray_tostr(feature_model_scores['auc']))
-        f.write(nparray_tostr(pooling_model_scores['auc']))
-        
-        f.write(nparray_tostr(feature_counts['class0']))
-        f.write(nparray_tostr(feature_counts['class1']))
-        
-        f.write(nparray_tostr(covered_docs))
+        if ls_transitions == [[] for i in range(result.shape[0])]:
+            f.write('\n')
+        else:
+            f.write(nparray_tostr(np.array(ls_transitions)))
 
 def nparray_tostr(array):
     return ' '.join([str(val) for val in array]) + '\n'
@@ -458,16 +483,22 @@ if __name__ == '__main__':
     parser.add_argument('-seed', type=int, default=0, help='Seed to the random number generator')
     parser.add_argument('-bootstrap', type=int, default=2, help='Number of documents to bootstrap')
     parser.add_argument('-balance', default=True, action='store_false', help='Ensure both classes starts with equal # of docs after bootstrapping')
-    parser.add_argument('-budget', type=int, default=250, help='budget in $')
+    parser.add_argument('-budget', type=int, default=500, help='budget in $')
     parser.add_argument('-alpha', type=float, default=1, help='alpha for the MultinomialNB instance model')
     parser.add_argument('-cost', type=float, default=1, help='cost per document for (class label + feature label)')
     parser.add_argument('-smoothing', type=float, default=0, help='smoothing parameter for the feature MNB model')
+    parser.add_argument('-coverage', type=float, default=1., help='% docs covered before disagreement is ran')
     args = parser.parse_args()
 
     result = run_trials(num_trials=args.trials, dataset=args.dataset, selection_strategy=args.strategy,\
                 metric=args.metric, C=args.c, alpha=args.alpha, smoothing=args.smoothing, \
-                bootstrap_size=args.bootstrap, balance=args.balance, budget=args.budget/args.cost, \
+                bootstrap_size=args.bootstrap, balance=args.balance, coverage=args.coverage, budget=args.budget/args.cost, \
                 seed=args.seed, Debug=args.debug)
     
-    save_result(average_results(result), filename='_'.join([args.strategy, args.metric, 'result.txt']))
+    if args.strategy == 'cover_then_disagree':
+        save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), '{:d}trials'.format(args.trials), 'result.txt']))
+        save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), 'averaged', 'result.txt']))
+    else:
+        save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:d}trials'.format(args.trials), 'result.txt']))
+        save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'averaged', 'result.txt']))
     

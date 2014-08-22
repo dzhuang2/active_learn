@@ -51,7 +51,7 @@ def label_agnostic_covering(X, feature_rank):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-dataset', default='imdb', nargs='*', \
+    parser.add_argument('-dataset', default=['imdb'], nargs='*', \
                     help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
     args = parser.parse_args()
     vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
