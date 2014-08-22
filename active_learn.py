@@ -424,6 +424,8 @@ def save_result(result, filename='result.txt'):
         
         if ls_transitions == [[] for i in range(result.shape[0])]:
             f.write('\n')
+        elif isinstance(ls_transitions[0], list): # meaning that the result is averaged
+            f.write(nparray_tostr(np.array(ls_transitions[0])))
         else:
             f.write(nparray_tostr(np.array(ls_transitions)))
 
