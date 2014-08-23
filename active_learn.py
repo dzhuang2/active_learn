@@ -104,11 +104,11 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
                 covered_docs.update(f_covered_docs)
             
             if selection_strategy == 'covering' or selection_strategy == 'covering_fewest':
-                doc_pick_model.update(X_pool, feature)
+                doc_pick_model.update(X_pool, feature, doc)
             elif selection_strategy == 'cheating':
                 doc_pick_model.update(X_pool, feature, y_pool[doc])
             elif selection_strategy == 'cover_then_disagree' and doc_pick_model.phase == 'covering':
-                doc_pick_model.covering.update(X_pool, feature)
+                doc_pick_model.covering.update(X_pool, feature, doc)
         
         pooling_model.fit(instance_model, feature_model, weights=[0.5, 0.5]) # train pooling_model
         
@@ -176,13 +176,12 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         # Update the pooling model
         pooling_model.fit(instance_model, feature_model, weights=[0.5, 0.5])
         
-        if feature:
-            if selection_strategy == 'covering' or selection_strategy == 'covering_fewest':
-                doc_pick_model.update(X_pool, feature)
-            elif selection_strategy == 'cheating':
-                doc_pick_model.update(X_pool, feature, label)
-            elif selection_strategy == 'cover_then_disagree' and doc_pick_model.phase == 'covering':
-                doc_pick_model.covering.update(X_pool, feature)
+        if selection_strategy == 'covering' or selection_strategy == 'covering_fewest':
+            doc_pick_model.update(X_pool, feature, doc_id)
+        elif selection_strategy == 'cheating':
+            doc_pick_model.update(X_pool, feature, label)
+        elif selection_strategy == 'cover_then_disagree' and doc_pick_model.phase == 'covering':
+            doc_pick_model.covering.update(X_pool, feature, doc_id)
         
         # Evaluate performance based on Instance Model
         (accu, auc) = evaluate_model(instance_model, X_test, y_test)

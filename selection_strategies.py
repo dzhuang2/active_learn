@@ -268,7 +268,13 @@ class CoveringStrategy(object):
         
         return doc_id
     
-    def update(self, X, feature):
+    def update(self, X, feature, docid):
+        # if top feature is None, increment the count for the document to remove it from sampling pool
+        if feature == None:
+            self.docs_feature_count[docid] += 1
+            return
+            
+        # if feature is not None
         X_csc = X.tocsc()
         docs_with_features = X_csc.getcol(feature).indices
         docs_uncovered_before = np.nonzero(self.docs_feature_count == 0)[0]
