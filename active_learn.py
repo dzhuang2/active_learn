@@ -176,12 +176,13 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         # Update the pooling model
         pooling_model.fit(instance_model, feature_model, weights=[0.5, 0.5])
         
-        if selection_strategy == 'covering' or selection_strategy == 'covering_fewest':
-            doc_pick_model.update(X_pool, feature)
-        elif selection_strategy == 'cheating':
-            doc_pick_model.update(X_pool, feature, label)
-        elif selection_strategy == 'cover_then_disagree' and doc_pick_model.phase == 'covering':
-            doc_pick_model.covering.update(X_pool, feature)
+        if feature:
+            if selection_strategy == 'covering' or selection_strategy == 'covering_fewest':
+                doc_pick_model.update(X_pool, feature)
+            elif selection_strategy == 'cheating':
+                doc_pick_model.update(X_pool, feature, label)
+            elif selection_strategy == 'cover_then_disagree' and doc_pick_model.phase == 'covering':
+                doc_pick_model.covering.update(X_pool, feature)
         
         # Evaluate performance based on Instance Model
         (accu, auc) = evaluate_model(instance_model, X_test, y_test)
@@ -226,7 +227,7 @@ def load_dataset(dataset):
         (X_pool, y_pool, X_test, y_test) = load_data()
         return (X_pool, y_pool, X_test, y_test)
     elif isinstance(dataset, list) and len(dataset) == 3 and dataset[0] == '20newsgroups':
-        vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 3))
+        vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
         X_pool, y_pool, X_test, y_test, X_pool_docs, X_test_docs = \
         load_newsgroups(class1=dataset[1], class2=dataset[2], vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test)
@@ -279,7 +280,7 @@ def average_results(result):
     num_trials = result.shape[0]
     
     if num_trials == 1:
-        return result[0]
+        return result
     
     ls_transitions = []
     
