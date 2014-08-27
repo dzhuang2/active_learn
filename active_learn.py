@@ -12,7 +12,7 @@ from sklearn import metrics
 from sklearn.datasets import load_svmlight_file
 from feature_expert import feature_expert
 from selection_strategies import RandomBootstrap, RandomStrategy, UNCSampling, DisagreementStrategy
-from selection_strategies import CoveringStrategy, CheatingApproach, CoveringThenDisagreement, CoverThenUncertainty
+from selection_strategies import CoveringStrategy, CheatingApproach, CoveringThenDisagreement
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -36,7 +36,7 @@ def load_data(pool_filename='./aclImdb/imdb-binary-pool-mindf5-ng11.bak', \
     return (X_pool, y_pool, X_test, y_test)
 
 def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert, \
-          selection_strategy, disagree_strat, coverage, budget, instance_model, feature_model, \
+          selection_strategy, coverage, budget, instance_model, feature_model, \
           pooling_model, seed=0, Debug=False):
     
     start = time()
@@ -64,7 +64,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         doc_pick_model = UNCSampling(pooling_model, feature_expert, y_pool, Debug)
     elif selection_strategy == 'disagreement':
         doc_pick_model = DisagreementStrategy(instance_model, feature_model, \
-            feature_expert, y_pool, disagree_strat, Debug=Debug)
+            feature_expert, y_pool, 'KLD', Debug=Debug)
     elif selection_strategy == 'covering':
         doc_pick_model = CoveringStrategy(feature_expert, num_samples, y_pool, \
             type='unknown', seed=seed, Debug=Debug)
@@ -77,11 +77,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     elif selection_strategy == 'cover_then_disagree':
         doc_pick_model = CoveringThenDisagreement(feature_expert, instance_model, \
             feature_model, num_samples, percentage=coverage, y=y_pool, type='unknown', \
-            metric=disagree_strat, seed=seed, Debug=Debug)
-    elif selection_strategy == 'cover_then_uncertainty':
-        doc_pick_model = CoverThenUncertainty(feature_expert, pooling_model, \
-            num_samples, percentage=coverage, y=y_pool, type='unknown', \
-            seed=seed, Debug=Debug)
+            metric='KLD', seed=seed, Debug=Debug)
     else:
         raise ValueError('Selection strategy: \'%s\' invalid!' % selection_strategy)
     
@@ -142,8 +138,6 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         # Choose a document based on the strategy chosen
         if selection_strategy == 'cover_then_disagree':
             doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
-        elif selection_strategy == 'cover_then_uncertainty':
-            doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
         else:
             doc_id = doc_pick_model.choice(X_pool, pool_set)
         
@@ -182,19 +176,13 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         # Update the pooling model
         pooling_model.fit(instance_model, feature_model, weights=[0.5, 0.5])
         
-        # print 'docs = %d, feature = %s' % (doc_id, str(feature))
-        
         if selection_strategy == 'covering' or selection_strategy == 'covering_fewest':
             doc_pick_model.update(X_pool, feature, doc_id)
         elif selection_strategy == 'cheating':
             doc_pick_model.update(X_pool, feature, label)
         elif selection_strategy == 'cover_then_disagree' and doc_pick_model.phase == 'covering':
             doc_pick_model.covering.update(X_pool, feature, doc_id)
-        elif selection_strategy == 'cover_then_uncertainty' and doc_pick_model.phase == 'covering':
-            doc_pick_model.covering.update(X_pool, feature, doc_id)
         
-#        print 'covering_fewest features: %d, feature model features: %d' % (len(doc_pick_model.annotated_features), len(feature_model.class0_features + feature_model.class1_features))
-
         # Evaluate performance based on Instance Model
         (accu, auc) = evaluate_model(instance_model, X_test, y_test)
         instance_model_scores['auc'].append(auc)
@@ -219,8 +207,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     
     if isinstance(doc_pick_model, CoveringThenDisagreement):
         transition = doc_pick_model.transition
-    elif isinstance(doc_pick_model, CoverThenUncertainty):
-        transition = doc_pick_model.transition
+        print 'covering transition happens at sample #%d' % doc_pick_model.transition
     else:
         transition = None
     
@@ -237,8 +224,6 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
 def load_dataset(dataset):
     if dataset == ['imdb']:
         (X_pool, y_pool, X_test, y_test) = load_data()
-#        vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1,1))
-#        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='./aclImdb', shuffle=False, vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test)
     elif isinstance(dataset, list) and len(dataset) == 3 and dataset[0] == '20newsgroups':
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
@@ -256,7 +241,7 @@ def load_dataset(dataset):
         return (X_pool, y_pool, X_test, y_test)
     
 def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smoothing, \
-                bootstrap_size, balance, coverage, disagree_strat, budget, seed=0, Debug=False):
+                bootstrap_size, balance, coverage, budget, seed=0, Debug=False):
     
     (X_pool, y_pool, X_test, y_test) = load_dataset(dataset)    
     fe = feature_expert(X_pool, y_pool, metric, smoothing=1e-6, C=C)
@@ -279,8 +264,7 @@ def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smooth
             training_set, pool_set = RandomBootstrap(X_pool, y_pool, bootstrap_size, balance, trial_seed)
         
         result[i] = learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, \
-            fe, selection_strategy, disagree_strat, coverage, budget, instance_model, \
-            feature_model, pooling_model, trial_seed, Debug)
+            fe, selection_strategy, coverage, budget, instance_model, feature_model, pooling_model, trial_seed, Debug)
     
     return result
 
@@ -491,7 +475,7 @@ if __name__ == '__main__':
                         help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
     parser.add_argument('-strategy', choices=['random', 'uncertaintyIM', 'uncertaintyFM', \
                         'uncertaintyPM', 'disagreement', 'covering', 'covering_fewest', \
-                        'cheating', 'cover_then_disagree', 'cover_then_uncertainty'], default='random', \
+                        'cheating', 'cover_then_disagree'], default='random', \
                         help='Document selection strategy to be used')
     parser.add_argument('-metric', choices=['mutual_info', 'L1'], default="L1", \
                         help='Specifying the type of feature expert to be used')
@@ -506,19 +490,14 @@ if __name__ == '__main__':
     parser.add_argument('-cost', type=float, default=1, help='cost per document for (class label + feature label)')
     parser.add_argument('-smoothing', type=float, default=0, help='smoothing parameter for the feature MNB model')
     parser.add_argument('-coverage', type=float, default=1., help='% docs covered before disagreement is ran')
-    parser.add_argument('-disagree_metric', default='KLD', help='metric used to determine disagreement between IM and FM')
     args = parser.parse_args()
 
     result = run_trials(num_trials=args.trials, dataset=args.dataset, selection_strategy=args.strategy,\
                 metric=args.metric, C=args.c, alpha=args.alpha, smoothing=args.smoothing, \
-                bootstrap_size=args.bootstrap, balance=args.balance, coverage=args.coverage, \
-                disagree_strat=args.disagree_metric, budget=args.budget/args.cost, \
+                bootstrap_size=args.bootstrap, balance=args.balance, coverage=args.coverage, budget=args.budget/args.cost, \
                 seed=args.seed, Debug=args.debug)
     
     if args.strategy == 'cover_then_disagree':
-        save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), '{:d}trials'.format(args.trials), 'result.txt']))
-        save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), 'averaged', 'result.txt']))
-    elif args.strategy == 'cover_then_uncertainty':
         save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), '{:d}trials'.format(args.trials), 'result.txt']))
         save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), 'averaged', 'result.txt']))
     else:
