@@ -524,9 +524,6 @@ if __name__ == '__main__':
     if args.strategy == 'cover_then_disagree':
         save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), '{:d}trials'.format(args.trials), 'result.txt']))
         save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), 'averaged', 'result.txt']))
-    elif args.strategy == 'cover_then_uncertainty':
-        save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), '{:d}trials'.format(args.trials), 'result.txt']))
-        save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), 'averaged', 'result.txt']))
     else:
         save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:d}trials'.format(args.trials), 'result.txt']))
         save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'averaged', 'result.txt']))
