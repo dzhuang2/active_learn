@@ -7,6 +7,7 @@ This file contains the following:
     UNCSampling: pick the next document based on uncertainty
     DisagreementStrategy: pick the next document based on how much the instance model and feature model disagree
     CoveringStrategy: pick the next document that does NOT have any of its features annotated
+    CoverThenUncertainty: cover x% of the documents then perform uncertainty sampling using the pooling model
     CoveringFewest: pick the next document with the among the fewest number of features annotated
     CheatingApproach: pick the next document using feature expert's rankings
 '''
@@ -113,11 +114,13 @@ class UNCSampling(object):
         return doc_id
         
 class DisagreementStrategy(object):
-    def __init__(self, instance_model, feature_model, feature_expert, y, metric, Debug=False):
+    def __init__(self, instance_model, feature_model, feature_expert, y, metric, seed=50, Debug=False):
         self.instance_model = instance_model
         self.feature_model = feature_model
         self.metric = metric
         self.Debug = Debug
+        self.rgen = np.random
+        self.rgen.seed(0)
         
         if self.Debug:
             self.feature_expert = feature_expert
@@ -128,8 +131,76 @@ class DisagreementStrategy(object):
     def choice(self, X, pool):
         if self.metric == 'KLD':
             return self.KLD(X, pool)
+        elif self.metric == 'vote':
+            return self.vote(X, pool)
+        elif self.metric == 'euclidean':
+            return self.euclidean(X, pool)
         else:
             raise ValueError('metric must be one of the following: \'KLD\'!')
+
+    def euclidean(self, X, pool):
+        y_IM_probas = self.instance_model.predict_proba(X[pool])
+        y_FM_probas = self.feature_model.predict_proba(X[pool])
+
+        dist = np.sum(np.multiply(y_IM_probas - y_FM_probas, y_IM_probas - y_FM_probas), axis=1)
+        # select the document with the largest euclidean distance
+        doc_id = np.array(pool)[np.argsort(dist)[-1]]
+
+        if self.Debug:
+            print '\n'
+            print '=' * 50
+            print 'Feature model thus far:'
+            print '*' * 50
+            print 'Negative features (class 0):'
+            print ', '.join(self.feature_names[self.feature_model.class0_features])
+            print 'Positive features (class 1):'
+            print ', '.join(self.feature_names[self.feature_model.class1_features])
+            print '=' * 50
+            print_all_features(self.feature_names, self.feature_expert, self.top_n, doc_id, self.X_pool, self.y_pool, self.X_pool_docs)
+            
+            IM_prob = self.instance_model.predict_proba(self.X_pool[doc_id])
+            print 'instance model predict_probability: class0 = %0.5f, class1 = %0.5f' % (IM_prob[0, 0], IM_prob[0, 1])
+            
+            FM_prob = self.feature_model.predict_proba(self.X_pool[doc_id])
+            print 'feature model predict_probability:  class0 = %0.5f, class1 = %0.5f' % (FM_prob[0, 0], FM_prob[0, 1])
+
+            sorted_dist = np.argsort(dist)
+            print 'top 10 Euclidean Distances:'
+            print dist[sorted_dist[-10:]]
+
+            print sorted_dist[:10]
+            for i in range(1, self.top_n + 1):
+                print 'Rank %d: doc#%d, distance=%10.5f' % (i, pool[sorted_dist[-i]], dist[sorted_dist[-i]])
+            
+            print 'this doc\'s distance = ', dist[sorted_dist[-1]]
+
+            ch = raw_input('Press Enter to continue...  ')
+            print 
+            
+            if ch == 'n':
+                sys.exit(1)
+            
+        return doc_id
+
+    def vote(self, X, pool):
+        y_IM_probas = self.instance_model.predict_proba(X[pool])
+        y_FM_probas = self.feature_model.predict_proba(X[pool])
+
+        y_IM_probas[y_IM_probas >= 0.5] = 1
+        y_IM_probas[y_IM_probas < 0.5] = 0
+
+        y_FM_probas[y_FM_probas >= 0.5] = 1
+        y_FM_probas[y_FM_probas < 0.5] = 0
+
+        vote = y_IM_probas + y_FM_probas
+        docs = vote[:,0] == 1 # these docs would have conflicting votes from IM and PM
+        doc_ids = np.array(pool)[docs].tolist()
+        
+        choice = self.rgen.randint(len(doc_ids)) # choose a random document from the list of doc_ids
+
+        print 'number of documents with conflicting votes: %d' % len(doc_ids)
+
+        return doc_ids[choice]
 
     def KLD(self, X, pool):
         '''
@@ -241,30 +312,30 @@ class CoveringStrategy(object):
         else:
             doc_id = self.rgen.permutation(sampling_pool)[0]
         
-        # if self.Debug and doc_id != None:
-            # print 'min number of features: %d' % min
-            # print 'num of documents in the sampling_pool: %d' % len(sampling_pool)
-            
-            # print '%d features annotated so far:' % len(self.annotated_features)
-            # print ', '.join([str((f, self.feature_names[f])) for f in self.annotated_features])
-            
-            # print_all_features(self.feature_names, self.feature_expert, self.top_n, doc_id, self.X_pool, self.y_pool, self.X_pool_docs)
-            
-            # feature = self.feature_expert.most_informative_feature(self.X_pool[doc_id], self.y_pool[doc_id])
-            # print 'feature to be added to the model = (%d, %s)' % (feature, self.feature_names[feature])
-            # print 'label to be added to the model = %d' % self.y_pool[doc_id]
-            # print
-            
-            # print 'making sure that X_pool and X are indeed the same:'
-            # print 'label according to y: %d' % self.y[doc_id]
-            # x_feature = self.feature_expert.most_informative_feature(X[doc_id], self.y[doc_id])
-            # print 'feature according to X: (%d, %s)' % (x_feature, self.feature_names[x_feature])
-            
-            # ch = raw_input('Press Enter to continue...  ')
-            # print '-' * 50
-            
-            # if ch == 'n':
-                # sys.exit(1)
+#        if self.Debug and doc_id != None:
+#            print 'min number of features: %d' % min
+#            print 'num of documents in the sampling_pool: %d' % len(sampling_pool)
+#            
+#            print '%d features annotated so far:' % len(self.annotated_features)
+#            print ', '.join([str((f, self.feature_names[f])) for f in self.annotated_features])
+#            
+#            print_all_features(self.feature_names, self.feature_expert, self.top_n, doc_id, self.X_pool, self.y_pool, self.X_pool_docs)
+#            
+#            feature = self.feature_expert.most_informative_feature(self.X_pool[doc_id], self.y_pool[doc_id])
+#            print 'feature to be added to the model = (%d, %s)' % (feature, self.feature_names[feature])
+#            print 'label to be added to the model = %d' % self.y_pool[doc_id]
+#            print
+#            
+#            print 'making sure that X_pool and X are indeed the same:'
+#            print 'label according to y: %d' % self.y[doc_id]
+#            x_feature = self.feature_expert.most_informative_feature(X[doc_id], self.y[doc_id])
+#            print 'feature according to X: (%d, %s)' % (x_feature, self.feature_names[x_feature])
+#            
+#            ch = raw_input('Press Enter to continue...  ')
+#            print '-' * 50
+#            
+#            if ch == 'n':
+#                sys.exit(1)
         
         return doc_id
     
@@ -277,16 +348,21 @@ class CoveringStrategy(object):
         # if feature is not None
         X_csc = X.tocsc()
         docs_with_features = X_csc.getcol(feature).indices
-        docs_uncovered_before = np.nonzero(self.docs_feature_count == 0)[0]
+
+        if self.type == 'unknown':
+            min = 0
+        elif self.type == 'fewest':
+            min = np.min(self.docs_feature_count)
         
         if self.Debug:
-            # print 'feature to be removed: (%d, %s)' % (feature, self.feature_names[feature])
-            # print 'total number of documents with this feature = %d' % \
-                    # len(docs_with_features)
-            # print 'total number of documents with this feature in the pool = %d' % \
-                    # len(list(set(docs_uncovered_before).intersection(docs_with_features)))
-            # print 'number of documents in pool with no known features (before) = %d' % \
-                    # docs_uncovered_before.shape[0]
+            docs_uncovered_before = np.nonzero(self.docs_feature_count == min)[0]
+            print 'feature to be removed: (%d, %s)' % (feature, self.feature_names[feature])
+            print 'total number of documents with this feature = %d' % \
+                    len(docs_with_features)
+            print 'total number of documents with this feature in the pool = %d' % \
+                    len(list(set(docs_uncovered_before).intersection(docs_with_features)))
+            print 'number of documents in pool with no known features (before) = %d' % \
+                     docs_uncovered_before.shape[0]
             Feature_num = feature
             Word = self.feature_names[feature]
             Total = len(docs_with_features)
@@ -294,9 +370,9 @@ class CoveringStrategy(object):
             Before = docs_uncovered_before.shape[0]
             
         self.docs_feature_count[docs_with_features] += 1
-        docs_uncovered_after = np.nonzero(self.docs_feature_count == 0)[0]
         
         if self.Debug:
+            docs_uncovered_after = np.nonzero(self.docs_feature_count == min)[0]
             # print 'number of documents in pool with no known features (after) = %d' % \
                     # docs_uncovered_after.shape[0]
             # print 'number of documents removed from pool = %d' % \
@@ -409,6 +485,7 @@ class CoveringThenDisagreement(object):
         self.KLD = DisagreementStrategy(instance_model, feature_model, feature_expert, y, metric, Debug)
         self.phase = 'covering'
         self.min_docs_covered = num_samples * percentage
+        self.transition = None
         
     def choice(self, X, num, pool):
         if self.phase == 'covering':
@@ -417,9 +494,33 @@ class CoveringThenDisagreement(object):
             if doc_id == None or docs_covered > self.min_docs_covered:
                 self.phase = 'disagreement'
                 self.transition = num
+                print 'covering transition happens at sample #%d' % num
         
         if self.phase == 'disagreement':
             doc_id = self.KLD.choice(X, pool)
+        
+        return doc_id
+
+class CoverThenUncertainty(object):
+    def __init__(self, feature_expert, pooling_model, num_samples, percentage, y, \
+                 type='unknown', seed=0, Debug=False):
+        self.covering = CoveringStrategy(feature_expert, num_samples, y, type, seed, Debug)
+        self.uncertainty = UNCSampling(pooling_model, feature_expert, y, Debug)
+        self.phase = 'covering'
+        self.min_docs_covered = num_samples * percentage
+        self.transition = None
+        
+    def choice(self, X, num, pool):
+        if self.phase == 'covering':
+            doc_id = self.covering.choice(X, pool)
+            docs_covered = np.nonzero(self.covering.docs_feature_count > 0)[0].shape[0]
+            if doc_id == None or docs_covered > self.min_docs_covered:
+                self.phase = 'uncertainty'
+                self.transition = num
+                print 'covering transition happens at sample #%d' % num
+        
+        if self.phase == 'uncertainty':
+            doc_id = self.uncertainty.choice(X, pool)
         
         return doc_id
         
@@ -430,3 +531,62 @@ def load_Debug_data(top_n=10, min_df=5, max_df=1.0, binary=True, ngram_range=(1,
     X_pool, y_pool, _, _, X_pool_docs, _ = load_imdb(path, shuffle=shuffle, vectorizer=vect)
     feature_names = np.array(vect.get_feature_names())
     return (top_n, X_pool, y_pool, X_pool_docs, feature_names)
+
+from sklearn.naive_bayes import MultinomialNB
+from models import FeatureMNB, PoolingMNB
+from sklearn import metrics
+
+class OptimizeAUC(object):
+    '''
+    This class chooses the instance that is expected to lead to the maximum achievable AUC
+    
+    '''
+    def __init__(self, X_test, y_test, feature_expert, seed=0, sub_pool = 100, Debug=False):
+        self.X_test = X_test
+        self.y_test = y_test
+        self.feature_expert = feature_expert
+        self.rgen = np.random
+        self.rgen.seed(seed)
+        self.sub_pool = sub_pool
+        self.Debug = Debug
+        
+    
+    def choice(self, X, y, pool, train_indices, class0_feats, class1_feats):
+        
+        rand_indices = self.rgen.permutation(len(pool))
+        candidates = [pool[i] for i in rand_indices[:self.sub_pool]]
+        
+        aucs = []
+        
+        for doc in candidates:
+            new_train_indices = list(train_indices)
+            new_train_indices.append(doc)
+            
+            # train an instance model
+            instance_model = MultinomialNB(alpha=1.)
+            instance_model.fit(X[new_train_indices], y[new_train_indices])
+            
+            # train a feature model
+            
+            feature_model = FeatureMNB(class0_feats, class1_feats, self.feature_expert.num_features, 0)
+            
+            top_feat = self.feature_expert.most_informative_feature(X[doc], y[doc])
+            
+            if top_feat:
+                feature_model.fit(top_feat, y[doc]) # fit also calls update; so there is no need to update again
+            else:
+                feature_model.update()
+            
+            # pooling model
+            
+            pooling_model = PoolingMNB()
+            pooling_model.fit(instance_model, feature_model, weights=[0.5, 0.5])
+            
+            # evaluate
+            y_probas = pooling_model.predict_proba(self.X_test)
+            auc = metrics.roc_auc_score(self.y_test, y_probas[:, 1])
+            aucs.append(auc)
+                
+        doc_id = candidates[np.argsort(aucs)[-1]]
+        
+        return doc_id
