@@ -8,7 +8,7 @@ import numpy as np
 import argparse
 import pickle
 from sklearn.linear_model import LogisticRegression
-from imdb import load_newsgroups, load_nova
+from imdb import load_newsgroups, load_nova, load_imdb
 from sklearn.feature_extraction.text import CountVectorizer
 
 def label_agnostic_covering(X, feature_rank):
