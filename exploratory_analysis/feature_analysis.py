@@ -23,9 +23,12 @@ if __name__ == '__main__':
     parser.add_argument('-c', type=float, default=0.1, help='Penalty term for the L1 feature expert')
     args = parser.parse_args()
     
-    (X_pool, y_pool, X_test, y_test) = load_dataset(args.dataset)
+    (X_pool, y_pool, X_test, y_test, feat_names) = load_dataset(args.dataset)
     
     num_inst, num_feat = X_pool.shape
+    
+    if not feat_names:
+        feat_names = np.arange(num_feat)
     
     feature_frequency = np.diff(X_pool.tocsc().indptr)
         
@@ -60,5 +63,5 @@ if __name__ == '__main__':
     print '-' * 50
     
     for f in range(num_feat):
-        print "%d\t%d\t%0.3f\t%d" %(f, feature_frequency[f], fe.L1_weights[f], the_top[f])
+        print "%d\t%s\t%d\t%0.3f\t%d" %(f, str(feat_names[f]), feature_frequency[f], fe.L1_weights[f], the_top[f])
     

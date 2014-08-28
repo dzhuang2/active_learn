@@ -7,7 +7,7 @@ from sklearn import linear_model
 from time import time
 import sys
 from sklearn.naive_bayes import MultinomialNB
-from models import FeatureMNB
+from models import FeatureMNBUniform
 from active_learn import evaluate_model, load_dataset
 import argparse
 
@@ -74,7 +74,7 @@ if __name__ == '__main__':
                 remove=('headers', 'footers'), vectorizer=vect)
         feature_names = vect.get_feature_names()
     elif args.dataset == 'SRAA':
-        X_pool, y_pool, X_test, y_test = load_dataset(args.dataset, vect=vect)
+        X_pool, y_pool, X_test, y_test, feat_names = load_dataset(args.dataset, vect=vect)
         X_pool_docs = pickle.load(open('SRAA_X_train_corpus.pickle', 'rb'))
         X_test_docs = pickle.load(open('SRAA_X_test_corpus.pickle', 'rb'))
         feature_names = pickle.load(open('SRAA_feature_names.pickle', 'rb'))
@@ -109,7 +109,7 @@ if __name__ == '__main__':
     t0 = time()
     print '-' * 50
     print 'Starting to train feature_model(MNB)...'
-    feature_model = FeatureMNB([], [], num_feat=X_pool.shape[1], smoothing=1e-6, class_prior = [0.5, 0.5], r=100.)
+    feature_model = FeatureMNBUniform([], [], num_feat=X_pool.shape[1], smoothing=1e-6, class_prior = [0.5, 0.5], r=100.)
     
     for doc in range(X_pool.shape[0]):
         feature = fe.most_informative_feature(X_pool[doc], y_pool[doc])

@@ -9,7 +9,7 @@ from selection_strategies import RandomBootstrap
 def IM_explore(num_trials, dataset, bootstrap_size=0, balance=True, budget=500, seed=2343, Debug=False):
     sep = '-' * 50
     
-    (X_pool, y_pool, X_test, y_test) = load_dataset(dataset)
+    (X_pool, y_pool, X_test, y_test, feat_names) = load_dataset(dataset)
     
     models = {'MultinomialNB(alpha=1)':MultinomialNB(alpha=1), \
               'LogisticRegression(C=0.1, penalty=\'l1\')':LogisticRegression(C=0.1, penalty='l1'), \

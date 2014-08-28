@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.naive_bayes import MultinomialNB
 np.seterr(divide='ignore')
 
-class FeatureMNB(MultinomialNB):
+class FeatureMNBUniform(MultinomialNB):
     def __init__(self, class0_features, class1_features, num_feat, smoothing, class_prior = [0.5, 0.5], r=100.):
         self.class0_features = list(class0_features)
         self.class1_features = list(class1_features)
@@ -54,6 +54,31 @@ class FeatureMNB(MultinomialNB):
             self.class1_features = list(new_class1_features)
         
         self.update()
+
+class FeatureMNBWeighted(MultinomialNB):
+    
+    def __init__(self, num_feat, feat_count = None, alpha = 1., class_prior = [0.5, 0.5]):
+        
+        if feat_count:
+            self.feature_count_ = np.array(feat_count)
+        else:
+            self.feature_count_ = np.zeros(shape=(2, num_feat))
+        
+        self.alpha = alpha
+        
+        self.class_prior = class_prior        
+        self.class_log_prior_ = np.log(self.class_prior)
+        
+        self.classes_ = np.array([0, 1])
+
+    def update(self):
+        self._update_feature_log_prob()        
+         
+    def fit(self, feature, label):
+                
+        self.feature_count_[label, feature] += 1.        
+        self.update()
+
 
 class PoolingMNB(MultinomialNB):
     def fit(self, mnb1, mnb2, weights=[0.5, 0.5]):

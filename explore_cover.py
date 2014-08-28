@@ -17,7 +17,7 @@ import warnings
 warnings.filterwarnings("ignore", category=sp.SparseEfficiencyWarning)
 
 def covering(dataset, type='any', metric='L1', C=0.1, smoothing=1e-6):
-    X_pool, y_pool, X_test, y_test = load_dataset(dataset)
+    X_pool, y_pool, X_test, y_test, feat_names = load_dataset(dataset)
     num_samples, num_feat = X_pool.shape
     
     fe = feature_expert(X_pool, y_pool, metric, smoothing, C)

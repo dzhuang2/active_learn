@@ -533,7 +533,7 @@ def load_Debug_data(top_n=10, min_df=5, max_df=1.0, binary=True, ngram_range=(1,
     return (top_n, X_pool, y_pool, X_pool_docs, feature_names)
 
 from sklearn.naive_bayes import MultinomialNB
-from models import FeatureMNB, PoolingMNB
+from models import FeatureMNBUniform, FeatureMNBWeighted, PoolingMNB
 from sklearn import metrics
 
 class OptimizeAUC(object):
@@ -541,17 +541,18 @@ class OptimizeAUC(object):
     This class chooses the instance that is expected to lead to the maximum achievable AUC
     
     '''
-    def __init__(self, X_test, y_test, feature_expert, seed=0, sub_pool = 100, Debug=False):
+    def __init__(self, X_test, y_test, feature_expert, optimize="P", seed=0, sub_pool = 100, Debug=False):
         self.X_test = X_test
         self.y_test = y_test
         self.feature_expert = feature_expert
+        self.optimize=optimize        
         self.rgen = np.random
         self.rgen.seed(seed)
         self.sub_pool = sub_pool
         self.Debug = Debug
         
     
-    def choice(self, X, y, pool, train_indices, class0_feats, class1_feats):
+    def choice(self, X, y, pool, train_indices, current_feature_model):
         
         rand_indices = self.rgen.permutation(len(pool))
         candidates = [pool[i] for i in rand_indices[:self.sub_pool]]
@@ -568,7 +569,13 @@ class OptimizeAUC(object):
             
             # train a feature model
             
-            feature_model = FeatureMNB(class0_feats, class1_feats, self.feature_expert.num_features, 0)
+            feature_model = None
+            if isinstance(current_feature_model, FeatureMNBUniform):
+                feature_model = FeatureMNBUniform(current_feature_model.class0_feats, current_feature_model.class1_feats, self.feature_expert.num_features, 0)
+            elif isinstance(current_feature_model, FeatureMNBWeighted):
+                feature_model = FeatureMNBWeighted(num_feat = self.feature_expert.num_features, feat_count = current_feature_model.feature_count_, alpha = current_feature_model.alpha)
+            else:
+                raise ValueError('Feature model type: \'%s\' unknown!' % current_feature_model.__class__.__name__)
             
             top_feat = self.feature_expert.most_informative_feature(X[doc], y[doc])
             
@@ -583,7 +590,20 @@ class OptimizeAUC(object):
             pooling_model.fit(instance_model, feature_model, weights=[0.5, 0.5])
             
             # evaluate
-            y_probas = pooling_model.predict_proba(self.X_test)
+            
+            opt_model = None
+            
+            if self.optimize == "P":
+                opt_model = pooling_model
+            elif self.optimize == "I":
+                opt_model = instance_model
+            elif self.optimize == "F":
+                opt_model = feature_model
+            else:
+                raise ValueError('Optimization Model: \'%s\' invalid!' % self.optimize)
+            
+            y_probas = opt_model.predict_proba(self.X_test)
+            
             auc = metrics.roc_auc_score(self.y_test, y_probas[:, 1])
             aucs.append(auc)
                 

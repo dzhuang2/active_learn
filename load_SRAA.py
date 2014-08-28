@@ -2,6 +2,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.cross_validation import train_test_split, ShuffleSplit
 from sklearn.datasets import base as bunch
 from sklearn.datasets import load_files
+import pickle
 
 def remove_header_subject(text):
     """

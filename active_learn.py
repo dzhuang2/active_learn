@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.feature_extraction.text import CountVectorizer
 from imdb import load_imdb, load_newsgroups, load_nova
-from models import FeatureMNB, PoolingMNB
+from models import FeatureMNBUniform, FeatureMNBWeighted, PoolingMNB
 from sklearn import metrics
 from sklearn.datasets import load_svmlight_file
 from feature_expert import feature_expert
@@ -55,6 +55,10 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     
     num_samples = len(pool_set) + len(training_set)
     
+    num_feat = X_pool.shape[1]
+    
+    num_a_feat_chosen = np.zeros(num_feat)
+    
     if selection_strategy == 'random':
         doc_pick_model = RandomStrategy(seed)
     elif selection_strategy == 'uncertaintyIM':
@@ -83,9 +87,15 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         doc_pick_model = CoverThenUncertainty(feature_expert, pooling_model, \
             num_samples, percentage=coverage, y=y_pool, type='unknown', \
             seed=seed, Debug=Debug)
-    elif selection_strategy == "optAUC":
+    elif selection_strategy == "optaucP":
         doc_pick_model = OptimizeAUC(X_test, y_test, feature_expert, \
-            seed=seed, Debug=Debug)
+            optimize="P", seed=seed, Debug=Debug)
+    elif selection_strategy == "optaucI":
+        doc_pick_model = OptimizeAUC(X_test, y_test, feature_expert, \
+            optimize="I", seed=seed, Debug=Debug)
+    elif selection_strategy == "optaucF":
+        doc_pick_model = OptimizeAUC(X_test, y_test, feature_expert, \
+            optimize="F", seed=seed, Debug=Debug)
     else:
         raise ValueError('Selection strategy: \'%s\' invalid!' % selection_strategy)
     
@@ -111,6 +121,10 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
                 f_covered_docs = X_pool_csc[:, feature].indices
                 covered_docs.update(f_covered_docs)
             
+            # number of times a feat is chosen as a reason
+            if feature:
+                num_a_feat_chosen[feature] += 1
+            
             if selection_strategy == 'covering' or selection_strategy == 'covering_fewest':
                 doc_pick_model.update(X_pool, feature, doc)
             elif selection_strategy == 'cheating':
@@ -133,8 +147,13 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         pooling_model_scores['accu'].append(accu)
         
         # discovered feature counts
-        discovered_feature_counts['class0'].append(len(feature_model.class0_features))
-        discovered_feature_counts['class1'].append(len(feature_model.class1_features))
+        if isinstance(feature_model, FeatureMNBUniform):        
+            discovered_feature_counts['class0'].append(len(feature_model.class0_features))
+            discovered_feature_counts['class1'].append(len(feature_model.class1_features))
+        elif isinstance(feature_model, FeatureMNBWeighted):
+            nz = np.sum(feature_model.feature_count_>0, axis=1)
+            discovered_feature_counts['class0'].append(nz[0])
+            discovered_feature_counts['class1'].append(nz[1])
         
         num_docs_covered.append(len(covered_docs))
     
@@ -148,8 +167,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
         elif selection_strategy == 'cover_then_uncertainty':
             doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
-        elif selection_strategy == "optAUC":
-            doc_id = doc_pick_model.choice(X_pool, y_pool, pool_set, training_set, feature_model.class0_features, feature_model.class1_features)
+        elif selection_strategy.startswith('optauc'):
+            doc_id = doc_pick_model.choice(X_pool, y_pool, pool_set, training_set, feature_model)
         else:
             doc_id = doc_pick_model.choice(X_pool, pool_set)
         
@@ -185,6 +204,11 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             f_covered_docs = X_pool_csc[:, feature].indices
             covered_docs.update(f_covered_docs)
         
+        # number of times a feat is chosen as a reason
+        if feature:
+            num_a_feat_chosen[feature] += 1
+        
+        
         # Update the pooling model
         pooling_model.fit(instance_model, feature_model, weights=[0.5, 0.5])
         
@@ -217,9 +241,14 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         pooling_model_scores['accu'].append(accu)
         
         # discovered feature counts
-        discovered_feature_counts['class0'].append(len(feature_model.class0_features))
-        discovered_feature_counts['class1'].append(len(feature_model.class1_features))
-        
+        if isinstance(feature_model, FeatureMNBUniform):        
+            discovered_feature_counts['class0'].append(len(feature_model.class0_features))
+            discovered_feature_counts['class1'].append(len(feature_model.class1_features))
+        elif isinstance(feature_model, FeatureMNBWeighted):
+            nz = np.sum(feature_model.feature_count_>0, axis=1)
+            discovered_feature_counts['class0'].append(nz[0])
+            discovered_feature_counts['class1'].append(nz[1])
+         
         # docs covered        
         num_docs_covered.append(len(covered_docs))
     
@@ -238,33 +267,40 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     
     print 'Active Learning took %2.2fs' % (time() - start)
     
-    return (num_training_samples, instance_model_scores, feature_model_scores, pooling_model_scores, discovered_feature_counts, num_docs_covered, transition)
+    return (num_training_samples, instance_model_scores, feature_model_scores, pooling_model_scores, discovered_feature_counts, num_docs_covered, transition, num_a_feat_chosen)
 
 def load_dataset(dataset):
     if dataset == ['imdb']:
         #(X_pool, y_pool, X_test, y_test) = load_data()
-        vect = CountVectorizer(min_df=0.005, max_df=1./3, binary=True, ngram_range=(1,1))
-        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='./aclImdb', shuffle=True, vectorizer=vect)
-        return (X_pool, y_pool, X_test, y_test)
+        #vect = CountVectorizer(min_df=0.005, max_df=1./3, binary=True, ngram_range=(1,1))
+        vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1,1))        
+        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='C:\\Users\\mbilgic\\Desktop\\aclImdb', shuffle=True, vectorizer=vect)
+        return (X_pool, y_pool, X_test, y_test, vect.get_feature_names())
     elif isinstance(dataset, list) and len(dataset) == 3 and dataset[0] == '20newsgroups':
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
         X_pool, y_pool, X_test, y_test, _, _ = \
         load_newsgroups(class1=dataset[1], class2=dataset[2], vectorizer=vect)
-        return (X_pool, y_pool, X_test, y_test)
+        return (X_pool, y_pool, X_test, y_test, vect.get_feature_names())
     elif dataset == ['SRAA']:
         X_pool = pickle.load(open('SRAA_X_train.pickle', 'rb'))
         y_pool = pickle.load(open('SRAA_y_train.pickle', 'rb'))
         X_test = pickle.load(open('SRAA_X_test.pickle', 'rb'))
         y_test = pickle.load(open('SRAA_y_test.pickle', 'rb'))
-        return (X_pool, y_pool, X_test, y_test)
+        return (X_pool, y_pool, X_test, y_test, None)
     elif dataset == ['nova']:
         (X_pool, y_pool, X_test, y_test) = load_nova()
-        return (X_pool, y_pool, X_test, y_test)
+        return (X_pool, y_pool, X_test, y_test, None)
     
 def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smoothing, \
-                bootstrap_size, balance, coverage, disagree_strat, budget, seed=0, Debug=False):
+                bootstrap_size, balance, coverage, disagree_strat, budget, fmtype, seed=0, Debug=False):
     
-    (X_pool, y_pool, X_test, y_test) = load_dataset(dataset)    
+    (X_pool, y_pool, X_test, y_test, feat_names) = load_dataset(dataset)
+    
+    if not feat_names:
+        feat_names = np.arange(X_pool.shape[1])
+    
+    feat_freq = np.diff(X_pool.tocsc().indptr)   
+    
     fe = feature_expert(X_pool, y_pool, metric, smoothing=1e-6, C=C)
     result = np.ndarray(num_trials, dtype=object)
     
@@ -275,7 +311,15 @@ def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smooth
         trial_seed = seed + i # initialize the seed for the trial
         
         instance_model = MultinomialNB(alpha=alpha)
-        feature_model = FeatureMNB([], [], fe.num_features, smoothing)
+        
+        feature_model = None 
+        if fmtype == "fm_uniform":
+            feature_model = FeatureMNBUniform([], [], fe.num_features, smoothing)
+        elif fmtype == "fm_weighted":
+            feature_model = FeatureMNBWeighted(num_feat = fe.num_features, alpha = 1.)
+        else:
+            raise ValueError('Feature model type: \'%s\' invalid!' % fmtype)
+            
         pooling_model = PoolingMNB()
 
         if bootstrap_size == 0:
@@ -288,7 +332,7 @@ def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smooth
             fe, selection_strategy, disagree_strat, coverage, budget, instance_model, \
             feature_model, pooling_model, trial_seed, Debug)
     
-    return result
+    return result, feat_names, feat_freq
 
 def average_results(result):
     avg_IM_scores = dict()
@@ -306,7 +350,7 @@ def average_results(result):
     ls_transitions = []
     
     for i in range(num_trials):
-        num_training_set, IM_scores, FM_scores, PM_scores, feature_counts, covered_docs, transition = result[i]
+        num_training_set, IM_scores, FM_scores, PM_scores, feature_counts, covered_docs, transition, num_a_feat_chosen = result[i]
         if i == 0:
             avg_IM_scores['accu'] = np.array(IM_scores['accu'])
             avg_IM_scores['auc'] = np.array(IM_scores['auc'])
@@ -317,6 +361,7 @@ def average_results(result):
             avg_discovered_feature_counts['class0'] = np.array(feature_counts['class0'])
             avg_discovered_feature_counts['class1'] = np.array(feature_counts['class1'])
             num_docs_covered = np.array(covered_docs)
+            ave_num_a_feat_chosen = np.array(num_a_feat_chosen)
         else:
             avg_IM_scores['accu'] += np.array(IM_scores['accu'])
             avg_IM_scores['auc'] += np.array(IM_scores['auc'])
@@ -326,7 +371,8 @@ def average_results(result):
             avg_PM_scores['auc'] += np.array(PM_scores['auc'])
             avg_discovered_feature_counts['class0'] += np.array(feature_counts['class0'])
             avg_discovered_feature_counts['class1'] += np.array(feature_counts['class1'])
-            num_docs_covered += np.array(covered_docs)
+            num_docs_covered += np.array(covered_docs)            
+            ave_num_a_feat_chosen += num_a_feat_chosen
         
         ls_transitions.append(transition)
             
@@ -339,13 +385,14 @@ def average_results(result):
     avg_discovered_feature_counts['class0'] = avg_discovered_feature_counts['class0'] / float(num_trials)
     avg_discovered_feature_counts['class1'] = avg_discovered_feature_counts['class1'] / float(num_trials)
     num_docs_covered = num_docs_covered / float(num_trials)
+    ave_num_a_feat_chosen = ave_num_a_feat_chosen / float(num_trials)
     
     if len(ls_transitions) != result.shape[0]:
         raise ValueError('Something is wrong with the transition numbers')
     if ls_transitions == [[] for i in range(result.shape[0])]:
         ls_transitions = []
     
-    return np.array([(num_training_set, avg_IM_scores, avg_FM_scores, avg_PM_scores, avg_discovered_feature_counts, num_docs_covered, ls_transitions)])
+    return np.array([(num_training_set, avg_IM_scores, avg_FM_scores, avg_PM_scores, avg_discovered_feature_counts, num_docs_covered, ls_transitions, ave_num_a_feat_chosen)])
 
 def plot(num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores):
     axes_params = [0.1, 0.1, 0.58, 0.75]
@@ -380,7 +427,7 @@ def full_knowledge(dataset, metric='mutual_info', C=0.1, alpha=1, smoothing=0):
     feature model, and pooling model which provides an upper bound on how well
     these models can perform on this particular dataset
     '''
-    (X_pool,  y_pool, X_test, y_test) = load_dataset(dataset)
+    (X_pool,  y_pool, X_test, y_test, feat_names) = load_dataset(dataset)
     fe = feature_expert(X_pool, y_pool, metric, smoothing=1e-6, C=C)
     
     instance_model_scores = {'auc':[], 'accu':[]}
@@ -388,7 +435,7 @@ def full_knowledge(dataset, metric='mutual_info', C=0.1, alpha=1, smoothing=0):
     pooling_model_scores = {'auc':[], 'accu':[]}
     
     instance_model = MultinomialNB(alpha=alpha)
-    feature_model = FeatureMNB([], [], fe.num_features, smoothing)
+    feature_model = FeatureMNBUniform([], [], fe.num_features, smoothing)
     pooling_model = PoolingMNB()
 
     instance_model.fit(X_pool, y_pool)
@@ -426,7 +473,7 @@ def save_result(result, filename='result.txt'):
     ls_transitions = []
     with open(filename, 'w') as f:
         for i in range(result.shape[0]):
-            num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores, feature_counts, covered_docs, transition = result[i]
+            num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores, feature_counts, covered_docs, transition, num_a_feat_chosen = result[i]
             
             f.write(nparray_tostr(num_training_set))
             
@@ -482,6 +529,24 @@ def evaluate_model(model, X_test, y_test):
     accu = metrics.accuracy_score(y_test, pred_y)
     return (accu, auc)
 
+def save_result_num_a_feat_chosen(result, feat_names, feat_freq):
+    
+    ave_num_a_feat_chosen = np.zeros(len(feat_names))
+    
+    for i in range(args.trials):
+        num_a_feat_chosen = result[i][-1]
+        ave_num_a_feat_chosen += (num_a_feat_chosen / float(args.trials))
+    
+    filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, "num_a_feat_chosen", 'result.txt'])
+    
+    print '-' * 50
+    print 'saving result into \'%s\'' % filename
+            
+    with open(filename, 'w') as f:
+        f.write("ID\tNAME\tFREQ\tCOUNT\n")
+        for i in range(len(feat_names)):
+            f.write(str(i)+"\t"+str(feat_names[i])+"\t"+str(feat_freq[i])+"\t"+str(ave_num_a_feat_chosen[i])+"\n")
+
 if __name__ == '__main__':
     '''
     Example: 
@@ -497,7 +562,7 @@ if __name__ == '__main__':
                         help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
     parser.add_argument('-strategy', choices=['random', 'uncertaintyIM', 'uncertaintyFM', \
                         'uncertaintyPM', 'disagreement', 'covering', 'covering_fewest', \
-                        'cheating', 'cover_then_disagree', 'cover_then_uncertainty', 'optAUC'], default='random', \
+                        'cheating', 'cover_then_disagree', 'cover_then_uncertainty', 'optaucP', 'optaucI', 'optaucF'], default='random', \
                         help='Document selection strategy to be used')
     parser.add_argument('-metric', choices=['mutual_info', 'L1'], default="L1", \
                         help='Specifying the type of feature expert to be used')
@@ -513,13 +578,14 @@ if __name__ == '__main__':
     parser.add_argument('-smoothing', type=float, default=0, help='smoothing parameter for the feature MNB model')
     parser.add_argument('-coverage', type=float, default=1., help='% docs covered before disagreement is ran')
     parser.add_argument('-disagree_metric', default='KLD', help='metric used to determine disagreement between IM and FM')
+    parser.add_argument('-fmtype', choices=['fm_uniform', 'fm_weighted'], default="fm_weighted", help='The feature model type to use')
     args = parser.parse_args()
 
-    result = run_trials(num_trials=args.trials, dataset=args.dataset, selection_strategy=args.strategy,\
+    result, feat_names, feat_freq = run_trials(num_trials=args.trials, dataset=args.dataset, selection_strategy=args.strategy,\
                 metric=args.metric, C=args.c, alpha=args.alpha, smoothing=args.smoothing, \
                 bootstrap_size=args.bootstrap, balance=args.balance, coverage=args.coverage, \
                 disagree_strat=args.disagree_metric, budget=args.budget/args.cost, \
-                seed=args.seed, Debug=args.debug)
+                fmtype=args.fmtype, seed=args.seed, Debug=args.debug)
     
     if args.strategy == 'cover_then_disagree':
         save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), '{:d}trials'.format(args.trials), 'result.txt']))
@@ -527,4 +593,7 @@ if __name__ == '__main__':
     else:
         save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:d}trials'.format(args.trials), 'result.txt']))
         save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'averaged', 'result.txt']))
+    
+    save_result_num_a_feat_chosen(result, feat_names, feat_freq)
+    
     

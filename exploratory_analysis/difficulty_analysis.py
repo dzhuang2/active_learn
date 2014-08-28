@@ -17,7 +17,7 @@ from active_learn import load_dataset, evaluate_model
 
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import LogisticRegression
-from models import FeatureMNB
+from models import FeatureMNBUniform
 
 if __name__ == '__main__':
 
@@ -30,7 +30,7 @@ if __name__ == '__main__':
    
     args = parser.parse_args()
     
-    (X_pool, y_pool, X_test, y_test) = load_dataset(args.dataset)
+    (X_pool, y_pool, X_test, y_test, feat_names) = load_dataset(args.dataset)
     
     models = {'MultinomialNB(alpha=1)':MultinomialNB(alpha=1), \
               'LogisticRegression(C=1, penalty=\'l1\')':LogisticRegression(C=1, penalty='l1'), \
@@ -45,13 +45,13 @@ if __name__ == '__main__':
     
     fe = feature_expert(X_pool, y_pool, metric="L1", C=args.c)
     
-    all_feature_model = FeatureMNB(fe.feature_rank[0], fe.feature_rank[1], fe.num_features, smoothing=args.smoothing)
+    all_feature_model = FeatureMNBUniform(fe.feature_rank[0], fe.feature_rank[1], fe.num_features, smoothing=args.smoothing)
     all_feature_model.update()
     
     _, all_auc = evaluate_model(all_feature_model, X_test, y_test)
     
     
-    k_feature_model = FeatureMNB(fe.feature_rank[0][:args.k], fe.feature_rank[1][:args.k], fe.num_features, smoothing=args.smoothing)
+    k_feature_model = FeatureMNBUniform(fe.feature_rank[0][:args.k], fe.feature_rank[1][:args.k], fe.num_features, smoothing=args.smoothing)
     k_feature_model.update()
     
     _, k_auc = evaluate_model(k_feature_model, X_test, y_test)
