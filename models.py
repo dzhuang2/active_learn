@@ -57,14 +57,16 @@ class FeatureMNBUniform(MultinomialNB):
 
 class FeatureMNBWeighted(MultinomialNB):
     
-    def __init__(self, num_feat, feat_count = None, alpha = 1., class_prior = [0.5, 0.5]):
+    def __init__(self, num_feat, feat_count = None, imaginary_counts = 1., class_prior = [0.5, 0.5]):
         
         if feat_count:
             self.feature_count_ = np.array(feat_count)
         else:
             self.feature_count_ = np.zeros(shape=(2, num_feat))
         
-        self.alpha = alpha
+        self.imaginary_counts = imaginary_counts
+        
+        self.alpha = imaginary_counts
         
         self.class_prior = class_prior        
         self.class_log_prior_ = np.log(self.class_prior)

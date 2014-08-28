@@ -274,7 +274,7 @@ def load_dataset(dataset):
         #(X_pool, y_pool, X_test, y_test) = load_data()
         #vect = CountVectorizer(min_df=0.005, max_df=1./3, binary=True, ngram_range=(1,1))
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1,1))        
-        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='C:\\Users\\mbilgic\\Desktop\\aclImdb', shuffle=True, vectorizer=vect)
+        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='./aclImdb', shuffle=True, vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test, vect.get_feature_names())
     elif isinstance(dataset, list) and len(dataset) == 3 and dataset[0] == '20newsgroups':
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
@@ -316,7 +316,7 @@ def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smooth
         if fmtype == "fm_uniform":
             feature_model = FeatureMNBUniform([], [], fe.num_features, smoothing)
         elif fmtype == "fm_weighted":
-            feature_model = FeatureMNBWeighted(num_feat = fe.num_features, alpha = 1.)
+            feature_model = FeatureMNBWeighted(num_feat = fe.num_features, imaginary_counts = 1.)
         else:
             raise ValueError('Feature model type: \'%s\' invalid!' % fmtype)
             

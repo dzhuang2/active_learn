@@ -17,6 +17,9 @@ import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
 from imdb import load_imdb
 from feature_expert import print_all_features
+from sklearn.naive_bayes import MultinomialNB
+from models import FeatureMNBUniform, FeatureMNBWeighted, PoolingMNB
+from sklearn import metrics
 
 def RandomBootstrap(X_pool, y_pool, size, balance, seed=0):
     '''
@@ -532,10 +535,6 @@ def load_Debug_data(top_n=10, min_df=5, max_df=1.0, binary=True, ngram_range=(1,
     feature_names = np.array(vect.get_feature_names())
     return (top_n, X_pool, y_pool, X_pool_docs, feature_names)
 
-from sklearn.naive_bayes import MultinomialNB
-from models import FeatureMNBUniform, FeatureMNBWeighted, PoolingMNB
-from sklearn import metrics
-
 class OptimizeAUC(object):
     '''
     This class chooses the instance that is expected to lead to the maximum achievable AUC
@@ -573,7 +572,7 @@ class OptimizeAUC(object):
             if isinstance(current_feature_model, FeatureMNBUniform):
                 feature_model = FeatureMNBUniform(current_feature_model.class0_feats, current_feature_model.class1_feats, self.feature_expert.num_features, 0)
             elif isinstance(current_feature_model, FeatureMNBWeighted):
-                feature_model = FeatureMNBWeighted(num_feat = self.feature_expert.num_features, feat_count = current_feature_model.feature_count_, alpha = current_feature_model.alpha)
+                feature_model = FeatureMNBWeighted(num_feat = self.feature_expert.num_features, feat_count = current_feature_model.feature_count_, imaginary_counts = current_feature_model.imaginary_counts)
             else:
                 raise ValueError('Feature model type: \'%s\' unknown!' % current_feature_model.__class__.__name__)
             
