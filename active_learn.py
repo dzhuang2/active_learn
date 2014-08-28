@@ -242,13 +242,13 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
 
 def load_dataset(dataset):
     if dataset == ['imdb']:
-        (X_pool, y_pool, X_test, y_test) = load_data()
-#        vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1,1))
-#        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='./aclImdb', shuffle=False, vectorizer=vect)
+        #(X_pool, y_pool, X_test, y_test) = load_data()
+        vect = CountVectorizer(min_df=0.005, max_df=1./3, binary=True, ngram_range=(1,1))
+        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='./aclImdb', shuffle=True, vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test)
     elif isinstance(dataset, list) and len(dataset) == 3 and dataset[0] == '20newsgroups':
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
-        X_pool, y_pool, X_test, y_test, X_pool_docs, X_test_docs = \
+        X_pool, y_pool, X_test, y_test, _, _ = \
         load_newsgroups(class1=dataset[1], class2=dataset[2], vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test)
     elif dataset == ['SRAA']:
