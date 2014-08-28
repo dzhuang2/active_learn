@@ -59,7 +59,7 @@ class FeatureMNBWeighted(MultinomialNB):
     
     def __init__(self, num_feat, feat_count = None, imaginary_counts = 1., class_prior = [0.5, 0.5]):
         
-        if feat_count:
+        if feat_count is not None:
             self.feature_count_ = np.array(feat_count)
         else:
             self.feature_count_ = np.zeros(shape=(2, num_feat))
