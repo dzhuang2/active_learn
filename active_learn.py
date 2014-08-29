@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.feature_extraction.text import CountVectorizer
 from imdb import load_imdb, load_newsgroups, load_nova
-from models import FeatureMNBUniform, FeatureMNBWeighted, PoolingMNB
+from models import FeatureMNBUniform, FeatureMNBWeighted, PoolingMNB, ReasoningMNB
 from sklearn import metrics
 from sklearn.datasets import load_svmlight_file
 from feature_expert import feature_expert
@@ -38,7 +38,7 @@ def load_data(pool_filename='./aclImdb/imdb-binary-pool-mindf5-ng11.bak', \
 
 def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert, \
           selection_strategy, disagree_strat, coverage, budget, instance_model, feature_model, \
-          pooling_model, seed=0, Debug=False, \
+          pooling_model, reasoning_model, rmw_n, rmw_a, seed=0, Debug=False, \
           reasoning_strategy='random', switch=40):
     
     start = time()
@@ -48,6 +48,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     instance_model_scores = {'auc':[], 'accu':[]}
     feature_model_scores = {'auc':[], 'accu':[]}
     pooling_model_scores = {'auc':[], 'accu':[]}
+    reasoning_model_scores = {'auc':[], 'accu':[]}
         
     discovered_feature_counts = {'class0':[], 'class1': []}
     num_docs_covered = []    
@@ -119,8 +120,11 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             feature = feature_expert.most_informative_feature(X_pool[doc], y_pool[doc])
             
             if feature:
-                feature_model.fit(feature, y_pool[doc]) # train feature_model one by one
+                feature_model.fit(feature, y_pool[doc]) # train feature_model one by one            
             
+            # Reasoning model
+            reasoning_model.partial_fit(X_pool[doc], y_pool[doc], feature, rmw_n, rmw_a) # train feature_model one by one
+           
             # docs covered            
             if feature:
                 f_covered_docs = X_pool_csc[:, feature].indices
@@ -150,6 +154,10 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         (accu, auc) = evaluate_model(pooling_model, X_test, y_test)
         pooling_model_scores['auc'].append(auc)
         pooling_model_scores['accu'].append(accu)
+        
+        (accu, auc) = evaluate_model(reasoning_model, X_test, y_test)
+        reasoning_model_scores['auc'].append(auc)
+        reasoning_model_scores['accu'].append(accu)
         
         # discovered feature counts
         if isinstance(feature_model, FeatureMNBUniform):        
@@ -208,6 +216,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         # Update the feature model
         if feature:
             feature_model.fit(feature, label)
+            
+        reasoning_model.partial_fit(X_pool[doc_id], y_pool[doc_id], feature, rmw_n, rmw_a) # train feature_model one by one
         
         # docs covered
         if feature:
@@ -250,6 +260,11 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         pooling_model_scores['auc'].append(auc)
         pooling_model_scores['accu'].append(accu)
         
+        # Evaluate performance of the Reasoning Model
+        (accu, auc) = evaluate_model(reasoning_model, X_test, y_test)
+        reasoning_model_scores['auc'].append(auc)
+        reasoning_model_scores['accu'].append(accu)
+        
         # discovered feature counts
         if isinstance(feature_model, FeatureMNBUniform):        
             discovered_feature_counts['class0'].append(len(feature_model.class0_features))
@@ -277,7 +292,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     
     print 'Active Learning took %2.2fs' % (time() - start)
     
-    return (num_training_samples, instance_model_scores, feature_model_scores, pooling_model_scores, discovered_feature_counts, num_docs_covered, transition, num_a_feat_chosen)
+    return (num_training_samples, instance_model_scores, feature_model_scores, pooling_model_scores,reasoning_model_scores, discovered_feature_counts, num_docs_covered, transition, num_a_feat_chosen)
 
 def load_dataset(dataset):
     if dataset == ['imdb']:
@@ -303,7 +318,7 @@ def load_dataset(dataset):
         return (X_pool, y_pool, X_test, y_test, None)
     
 def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smoothing, \
-                bootstrap_size, balance, coverage, disagree_strat, budget, fmtype, seed=0, Debug=False, \
+                bootstrap_size, balance, coverage, disagree_strat, budget, fmtype, rmw_n, rmw_a, seed=0, Debug=False, \
                 reasoning_strategy='random', switch=40):
     
     (X_pool, y_pool, X_test, y_test, feat_names) = load_dataset(dataset)
@@ -333,6 +348,8 @@ def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smooth
             raise ValueError('Feature model type: \'%s\' invalid!' % fmtype)
             
         pooling_model = PoolingMNB()
+        
+        reasoning_model = ReasoningMNB(alpha=1)
 
         if bootstrap_size == 0:
             training_set = []
@@ -342,7 +359,7 @@ def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smooth
         
         result[i] = learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, \
             fe, selection_strategy, disagree_strat, coverage, budget, instance_model, \
-            feature_model, pooling_model, trial_seed, Debug, \
+            feature_model, pooling_model, reasoning_model, rmw_n, rmw_a, trial_seed, Debug, \
             reasoning_strategy, switch)
     
     return result, feat_names, feat_freq
@@ -351,6 +368,7 @@ def average_results(result):
     avg_IM_scores = dict()
     avg_FM_scores = dict()
     avg_PM_scores = dict()
+    avg_RM_scores = dict()
     
     avg_discovered_feature_counts = dict()
     num_docs_covered = []
@@ -363,7 +381,7 @@ def average_results(result):
     ls_transitions = []
     
     for i in range(num_trials):
-        num_training_set, IM_scores, FM_scores, PM_scores, feature_counts, covered_docs, transition, num_a_feat_chosen = result[i]
+        num_training_set, IM_scores, FM_scores, PM_scores, RM_scores, feature_counts, covered_docs, transition, num_a_feat_chosen = result[i]
         if i == 0:
             avg_IM_scores['accu'] = np.array(IM_scores['accu'])
             avg_IM_scores['auc'] = np.array(IM_scores['auc'])
@@ -371,6 +389,8 @@ def average_results(result):
             avg_FM_scores['auc'] = np.array(FM_scores['auc'])
             avg_PM_scores['accu'] = np.array(PM_scores['accu'])
             avg_PM_scores['auc'] = np.array(PM_scores['auc'])
+            avg_RM_scores['accu'] = np.array(RM_scores['accu'])
+            avg_RM_scores['auc'] = np.array(RM_scores['auc'])
             avg_discovered_feature_counts['class0'] = np.array(feature_counts['class0'])
             avg_discovered_feature_counts['class1'] = np.array(feature_counts['class1'])
             num_docs_covered = np.array(covered_docs)
@@ -382,6 +402,8 @@ def average_results(result):
             avg_FM_scores['auc'] += np.array(FM_scores['auc'])
             avg_PM_scores['accu'] += np.array(PM_scores['accu'])
             avg_PM_scores['auc'] += np.array(PM_scores['auc'])
+            avg_RM_scores['accu'] += np.array(RM_scores['accu'])
+            avg_RM_scores['auc'] += np.array(RM_scores['auc'])
             avg_discovered_feature_counts['class0'] += np.array(feature_counts['class0'])
             avg_discovered_feature_counts['class1'] += np.array(feature_counts['class1'])
             num_docs_covered += np.array(covered_docs)            
@@ -395,6 +417,8 @@ def average_results(result):
     avg_FM_scores['auc'] = avg_FM_scores['auc'] / num_trials
     avg_PM_scores['accu'] = avg_PM_scores['accu'] / num_trials
     avg_PM_scores['auc'] = avg_PM_scores['auc'] / num_trials
+    avg_RM_scores['accu'] = avg_RM_scores['accu'] / num_trials
+    avg_RM_scores['auc'] = avg_RM_scores['auc'] / num_trials
     avg_discovered_feature_counts['class0'] = avg_discovered_feature_counts['class0'] / float(num_trials)
     avg_discovered_feature_counts['class1'] = avg_discovered_feature_counts['class1'] / float(num_trials)
     num_docs_covered = num_docs_covered / float(num_trials)
@@ -405,7 +429,7 @@ def average_results(result):
     if ls_transitions == [[] for i in range(result.shape[0])]:
         ls_transitions = []
     
-    return np.array([(num_training_set, avg_IM_scores, avg_FM_scores, avg_PM_scores, avg_discovered_feature_counts, num_docs_covered, ls_transitions, ave_num_a_feat_chosen)])
+    return np.array([(num_training_set, avg_IM_scores, avg_FM_scores, avg_PM_scores, avg_RM_scores, avg_discovered_feature_counts, num_docs_covered, ls_transitions, ave_num_a_feat_chosen)])
 
 def plot(num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores):
     axes_params = [0.1, 0.1, 0.58, 0.75]
@@ -488,15 +512,17 @@ def save_result(result, filename='result.txt'):
     with open(filename, 'w') as f:
         for i in range(result.shape[0]):
             num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores, \
-            feature_counts, covered_docs, transition, num_a_feat_chosen = result[i]
+            reasoning_model_scores, feature_counts, covered_docs, transition, num_a_feat_chosen = result[i]
 
             ls_all_results.append(num_training_set)
             ls_all_results.append(instance_model_scores['accu'])
             ls_all_results.append(feature_model_scores['accu'])
             ls_all_results.append(pooling_model_scores['accu'])
+            ls_all_results.append(reasoning_model_scores['accu'])
             ls_all_results.append(instance_model_scores['auc'])
             ls_all_results.append(feature_model_scores['auc'])
             ls_all_results.append(pooling_model_scores['auc'])
+            ls_all_results.append(reasoning_model_scores['auc'])
             ls_all_results.append(feature_counts['class0'])
             ls_all_results.append(feature_counts['class1'])
             ls_all_results.append(covered_docs)
@@ -506,7 +532,7 @@ def save_result(result, filename='result.txt'):
                 ls_transitions.append(transition)
         
         ls_all_results.append(ls_transitions)
-        header = 'train#\tIM_accu\tFM_accu\tPM_accu\tIM_auc\tFM_auc\tPM_auc\tc0_feat\tc1_feat\tdocs_covered\ttransition'
+        header = 'train#\tIM_accu\tFM_accu\tPM_accu\tRM_accu\tIM_auc\tFM_auc\tPM_auc\tRM_auc\tc0_feat\tc1_feat\tdocs_covered\ttransition'
         f.write('\t'.join([header]*result.shape[0]) + '\n')
         for row in map(None, *ls_all_results):
             f.write('\t'.join([str(item) if item is not None else ' ' for item in row]) + '\n')
@@ -595,13 +621,16 @@ if __name__ == '__main__':
     parser.add_argument('-coverage', type=float, default=1., help='% docs covered before disagreement is ran')
     parser.add_argument('-disagree_metric', default='KLD', help='metric used to determine disagreement between IM and FM')
     parser.add_argument('-fmtype', choices=['fm_uniform', 'fm_weighted'], default="fm_weighted", help='The feature model type to use')
+    parser.add_argument('-rmw_n', type=float, default=1., help='The weight of non-annotated features for the reasoning model')
+    parser.add_argument('-rmw_a', type=float, default=1., help='The weight of annotated features for the reasoning model')
+
     args = parser.parse_args()
 
     result, feat_names, feat_freq = run_trials(num_trials=args.trials, dataset=args.dataset, selection_strategy=args.strategy,\
                 metric=args.metric, C=args.c, alpha=args.alpha, smoothing=args.smoothing, \
                 bootstrap_size=args.bootstrap, balance=args.balance, coverage=args.coverage, \
                 disagree_strat=args.disagree_metric, budget=args.budget/args.cost, \
-                fmtype=args.fmtype, seed=args.seed, Debug=args.debug, \
+                fmtype=args.fmtype, rmw_n=args.rmw_n, rmw_a=args.rmw_a, seed=args.seed, Debug=args.debug, \
                 reasoning_strategy=args.reasoningStrategy, switch=args.switch)
     
     if args.strategy == 'cover_then_disagree':

@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.naive_bayes import MultinomialNB
+
 np.seterr(divide='ignore')
 
 class FeatureMNBUniform(MultinomialNB):
@@ -95,12 +96,14 @@ class ReasoningMNB(MultinomialNB):
     provided by an expert is weighed more than the remaining features.
     """
     
-    def __init__(self, alpha=1.0, num_classes=2):
-        self.alpha = alpha
-        self.num_classes = num_classes
-        self.partial_fit_first_call = True  
+    def __init__(self, alpha=1.0, classes=[0, 1]):
+        super(ReasoningMNB, self).__init__(alpha=alpha)
+        self.classes_ = np.array(classes)
+        self.num_classes = len(classes)
+        self.first_call_to_partial_fit = True
+  
          
-    def partial_fit(self, x, y, f, w):
+    def partial_fit(self, x, y, f, w_n, w_a):
         """ Incremental fit on a single object.
         
         Parameters
@@ -119,27 +122,25 @@ class ReasoningMNB(MultinomialNB):
             msg = "x must be a single object. Passed %d objects."
             raise ValueError(msg % (x.shape[0]))
         
-        if x.shape[0] != y.shape[0]:
-            msg = "x.shape[0]=%d and y.shape[0]=%d are incompatible."
-            raise ValueError(msg % (x.shape[0], y.shape[0]))
         
+        _, n_features = x.shape        
         
-        _, n_features = x.shape
-        
-        if self.partial_fit_first_call:
+        if self.first_call_to_partial_fit:
             self.class_count_ = np.zeros(self.num_classes, dtype=np.float64)
             self.feature_count_ = np.zeros((self.num_classes, n_features),
                                            dtype=np.float64)
-            self.partial_fit_first_call = False
+            self.first_call_to_partial_fit = False
         
         self.class_count_[y] += 1
         
         #all features
-        self.feature_count_[y] += w*x[0]
+        self.feature_count_[y] += w_n*x[0]        
+        #self.feature_count_[y] += 0.1*x[0]
         
         #the annotated feature
         if f:
-            self.feature_count_[y][f] += (1-w)*x[0,f]
+            self.feature_count_[y][f] += (w_a-w_n)*x[0,f]
+            #self.feature_count_[y][f] += 9.9*x[0,f]
         
         self._update_feature_log_prob()
         self._update_class_log_prior()
