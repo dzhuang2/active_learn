@@ -115,6 +115,60 @@ class UNCSampling(object):
                 sys.exit(1)
         
         return doc_id
+
+class FeatureCertaintyStrategy(object):
+    '''
+    This class performs certainty sampling based on the feature model   
+    
+    '''
+    def __init__(self, model, feature_expert, y, Debug=False):
+        self.model = model
+        self.Debug = Debug
+        
+        if self.Debug:
+            self.feature_expert = feature_expert
+            self.y = y
+            self.top_n, self.X_pool, self.y_pool, self.X_pool_docs, self.feature_names = \
+                load_Debug_data()
+    
+    def choice(self, X, pool, certainClass):
+        y_probas = self.model.predict_proba(X[pool])
+        if certainClass==0:
+            doc_id = pool[np.argsort((y_probas[:, 0]))[::-1][0]]
+        else:
+            doc_id = pool[np.argsort((y_probas[:, 1]))[::-1][0]]
+
+        if self.Debug:
+            print '\n'
+            print '=' * 50
+            # print 'Feature model thus far:'
+            # print '*' * 50
+            # print 'Negative features (class 0):'
+            # print ', '.join(self.feature_names[self.model.class0_features])
+            # print 'Positive features (class 1):'
+            # print ', '.join(self.feature_names[self.model.class1_features])
+            # print '=' * 50
+            print_all_features(self.feature_names, self.feature_expert, self.top_n, doc_id, self.X_pool, self.y_pool, self.X_pool_docs)
+            doc_prob = self.model.predict_proba(self.X_pool[doc_id])
+            print 'feature model predict_probability class0 = %0.5f, class1 = %0.5f' % (doc_prob[0, 0], doc_prob[0, 1])
+            
+            feature = self.feature_expert.most_informative_feature(self.X_pool[doc_id], self.y_pool[doc_id])
+            print 'feature to be added to the model = (%d, %s)' % (feature, self.feature_names[feature])
+            print 'label to be added to the model = %d' % self.y_pool[doc_id]
+            print
+            
+            print 'making sure that X_pool and X are indeed the same:'
+            print 'label according to y: %d' % self.y[doc_id]
+            x_feature = self.feature_expert.most_informative_feature(X[doc_id], self.y[doc_id])
+            print 'feature according to X: (%d, %s)' % (x_feature, self.feature_names[x_feature])
+            
+            ch = raw_input('Press Enter to continue...  ')
+            print 
+            
+            if ch == 'n':
+                sys.exit(1)
+        
+        return doc_id
         
 class DisagreementStrategy(object):
     def __init__(self, instance_model, feature_model, feature_expert, y, metric, seed=50, Debug=False):
@@ -527,6 +581,41 @@ class CoverThenUncertainty(object):
         
         return doc_id
         
+
+class ReasoningThenFeatureCertainty(object):
+    def __init__(self, feature_expert, instance_model, feature_model, switch, \
+        reasoning_strategy, y, type='unknown', seed=0, Debug=False):
+        if reasoning_strategy=='random':
+            self.reasoning = RandomStrategy(seed)
+        elif reasoning_strategy=='uncertaintyIM':            
+            self.reasoning = UNCSampling(instance_model, feature_expert, y, Debug)
+        self.feature_certainty = FeatureCertaintyStrategy(feature_model, feature_expert, y, Debug)
+        self.phase = 'reasoning'        
+        self.transition = None
+        self.certainClass=0   
+        self.switch=switch     
+        
+    def choice(self, X, num, pool, train_set_size):
+        if self.phase == 'reasoning':           
+            doc_id = self.reasoning.choice(X, pool)               
+
+            if train_set_size==self.switch:
+                self.phase = 'featureCertainty'
+                self.transition = num
+                print 'reasoning transition happens at sample #%d' % num
+        
+        if self.phase == 'featureCertainty':
+            doc_id = self.feature_certainty.choice(X, pool,self.certainClass)
+            # alternate between picking class0 certain document class1 certain document
+            if self.certainClass==0:
+                self.certainClass=1
+            else:
+                self.certainClass==0
+
+        
+        return doc_id
+
+
 def load_Debug_data(top_n=10, min_df=5, max_df=1.0, binary=True, ngram_range=(1,1), \
                     shuffle=False, path='./aclImdb'):
     vect = CountVectorizer(min_df=min_df, max_df=max_df, binary=binary, ngram_range=ngram_range)
