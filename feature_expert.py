@@ -22,11 +22,12 @@ class feature_expert(object):
         2. logistic regression with L1 regularization weights
     
     '''
-    def __init__(self, X, y, metric, smoothing=1e-6, C=0.1):
+    def __init__(self, X, y, metric, smoothing=1e-6, C=0.1, seed=12345):
         self.sample_size, self.num_features = X.shape
         self.metric = metric
         self.smoothing = smoothing
         self.feature_rank = ([], [])
+        self.seed = seed
         
         print '-' * 50
         print 'Starting Feature Expert Training ...'
@@ -75,7 +76,7 @@ class feature_expert(object):
         return self.classify_features(feature_rank)
     
     def L1_rank(self, C, X, y):
-        clf_l1 = linear_model.LogisticRegression(C=C, penalty='l1')
+        clf_l1 = linear_model.LogisticRegression(C=C, penalty='l1', random_state=self.seed)
         clf_l1.fit(X, y)
         self.L1_weights = clf_l1.coef_[0]
         
@@ -88,7 +89,7 @@ class feature_expert(object):
         return feature_rank
     
     def rank_by_L1_weights(self, C, X, y):
-        clf_l1 = linear_model.LogisticRegression(C=C, penalty='l1')
+        clf_l1 = linear_model.LogisticRegression(C=C, penalty='l1', random_state=self.seed)
         clf_l1.fit(X, y)
         self.L1_weights = clf_l1.coef_[0]
         self.feature_count = self.count_features(X, y)
@@ -222,3 +223,41 @@ def check_feature_expert(dataset='imdb', metric='mutual_info', top_n=10, smoothi
             break
     
     return
+
+def output_features(filename='features.txt', dataset='imdb', metric='L1', smoothing=1e-6, C=0.1, \
+                    vect=CountVectorizer(min_df=5, max_df=1.0, binary=False)):
+
+    if isinstance(dataset, str) and dataset == 'imdb':
+        X_pool, y_pool, X_test, y_test, X_pool_docs, X_test_docs = load_imdb("./aclImdb", shuffle=True, vectorizer=vect)
+    elif isinstance(dataset, tuple) and len(dataset) == 3 and dataset[0] == 'newsgroup':
+        X_pool, y_pool, X_test, y_test, X_pool_docs, X_test_docs = load_newsgroups(dataset[1], dataset[2], vectorizer=vect)
+    
+    feature_names = vect.get_feature_names()
+    fe = feature_expert(X_pool, y_pool, metric, smoothing, C)
+
+    print 'saving into \'%s\'...' % filename
+    with open(filename, 'w') as f:
+        f.write('-' * 50 + '\n')
+        f.write('class 0 features:\n')
+        f.write('-' * 50 + '\n')
+        c0_feat = fe.class0_features_by_rank()
+        for i in range(len(c0_feat)):
+            feature = c0_feat[i]
+            f.write('rank: #%d, feature: #%d, ' % (i, feature))
+            f.write('feature name: ' + feature_names[feature].encode('utf8') + ' ')
+            f.write('L1 weight: %f' % fe.L1_weights[feature])
+            f.write('\n')
+
+        f.write('-' * 50 + '\n')
+        f.write('class 1 features:\n')
+        f.write('-' * 50 + '\n')
+        c1_feat = fe.class1_features_by_rank()
+        for i in range(len(c1_feat)):
+            feature = c1_feat[i]
+            f.write('rank: #%d, feature: #%d, ' % (i, feature))
+            f.write('feature name: ' + feature_names[feature].encode('utf8') + ' ')
+            f.write('L1 weight: %f' % fe.L1_weights[feature])
+            f.write('\n') 
+    
+    return
+    

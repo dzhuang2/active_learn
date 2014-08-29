@@ -286,6 +286,7 @@ def load_dataset(dataset):
         y_pool = pickle.load(open('SRAA_y_train.pickle', 'rb'))
         X_test = pickle.load(open('SRAA_X_test.pickle', 'rb'))
         y_test = pickle.load(open('SRAA_y_test.pickle', 'rb'))
+        feat_names = pickle.load(open('SRAA_feature_names.pickle', 'rb'))
         return (X_pool, y_pool, X_test, y_test, None)
     elif dataset == ['nova']:
         (X_pool, y_pool, X_test, y_test) = load_nova()
@@ -470,33 +471,29 @@ def save_result(result, filename='result.txt'):
     print '-' * 50
     print 'saving result into \'%s\'' % filename
     
+    ls_all_results = []
     ls_transitions = []
     with open(filename, 'w') as f:
         for i in range(result.shape[0]):
-            num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores, feature_counts, covered_docs, transition, num_a_feat_chosen = result[i]
-            
-            f.write(nparray_tostr(num_training_set))
-            
-            f.write(nparray_tostr(instance_model_scores['accu']))
-            f.write(nparray_tostr(feature_model_scores['accu']))
-            f.write(nparray_tostr(pooling_model_scores['accu']))
-            
-            f.write(nparray_tostr(instance_model_scores['auc']))
-            f.write(nparray_tostr(feature_model_scores['auc']))
-            f.write(nparray_tostr(pooling_model_scores['auc']))
-            
-            f.write(nparray_tostr(feature_counts['class0']))
-            f.write(nparray_tostr(feature_counts['class1']))
-            
-            f.write(nparray_tostr(covered_docs))
-            ls_transitions.append(transition)
+            num_training_set, instance_model_scores, feature_model_scores, pooling_model_scores, \
+            feature_counts, covered_docs, transition, num_a_feat_chosen = result[i]
+
+            ls_all_results.append(num_training_set)
+            ls_all_results.append(instance_model_scores['accu'])
+            ls_all_results.append(feature_model_scores['accu'])
+            ls_all_results.append(pooling_model_scores['accu'])
+            ls_all_results.append(instance_model_scores['auc'])
+            ls_all_results.append(feature_model_scores['auc'])
+            ls_all_results.append(pooling_model_scores['auc'])
+            ls_all_results.append(feature_counts['class0'])
+            ls_all_results.append(feature_counts['class1'])
+            ls_all_results.append(covered_docs)
+            ls_all_results.append([transition])
         
-        if ls_transitions == [[] for i in range(result.shape[0])]:
-            f.write('\n')
-        elif isinstance(ls_transitions[0], list): # meaning that the result is averaged
-            f.write(nparray_tostr(np.array(ls_transitions[0])))
-        else:
-            f.write(nparray_tostr(np.array(ls_transitions)))
+        header = 'train#\tIM_accu\tFM_accu\tPM_accu\tIM_auc\tFM_auc\tPM_auc\tc0_feat\tc1_feat\tdocs_covered\ttransition'
+        f.write('\t'.join([header]*result.shape[0]) + '\n')
+        for row in map(None, *ls_all_results):
+            f.write('\t'.join([str(item) if item is not None else ' ' for item in row]) + '\n')
 
 def nparray_tostr(array):
     return ' '.join([str(val) for val in array]) + '\n'
@@ -545,7 +542,7 @@ def save_result_num_a_feat_chosen(result, feat_names, feat_freq):
     with open(filename, 'w') as f:
         f.write("ID\tNAME\tFREQ\tCOUNT\n")
         for i in range(len(feat_names)):
-            f.write(str(i)+"\t"+str(feat_names[i])+"\t"+str(feat_freq[i])+"\t"+str(ave_num_a_feat_chosen[i])+"\n")
+            f.write(str(i)+"\t"+feat_names[i].encode('utf8')+"\t"+str(feat_freq[i])+"\t"+str(ave_num_a_feat_chosen[i])+"\n")
 
 if __name__ == '__main__':
     '''
@@ -595,5 +592,4 @@ if __name__ == '__main__':
         save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'averaged', 'result.txt']))
     
     save_result_num_a_feat_chosen(result, feat_names, feat_freq)
-    
-    
+
