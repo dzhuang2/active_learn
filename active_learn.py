@@ -287,7 +287,7 @@ def load_dataset(dataset):
         X_test = pickle.load(open('SRAA_X_test.pickle', 'rb'))
         y_test = pickle.load(open('SRAA_y_test.pickle', 'rb'))
         feat_names = pickle.load(open('SRAA_feature_names.pickle', 'rb'))
-        return (X_pool, y_pool, X_test, y_test, None)
+        return (X_pool, y_pool, X_test, y_test, feat_names)
     elif dataset == ['nova']:
         (X_pool, y_pool, X_test, y_test) = load_nova()
         return (X_pool, y_pool, X_test, y_test, None)
