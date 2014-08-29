@@ -12,7 +12,7 @@ from sklearn import metrics
 from sklearn.datasets import load_svmlight_file
 from feature_expert import feature_expert
 from selection_strategies import RandomBootstrap, RandomStrategy, UNCSampling, DisagreementStrategy
-from selection_strategies import CoveringStrategy, CheatingApproach, CoveringThenDisagreement, CoverThenUncertainty
+from selection_strategies import CoveringStrategy, CheatingApproach, CoveringThenDisagreement, CoverThenUncertainty, ReasoningThenFeatureCertainty
 from selection_strategies import OptimizeAUC
 
 import warnings
@@ -38,7 +38,8 @@ def load_data(pool_filename='./aclImdb/imdb-binary-pool-mindf5-ng11.bak', \
 
 def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert, \
           selection_strategy, disagree_strat, coverage, budget, instance_model, feature_model, \
-          pooling_model, seed=0, Debug=False):
+          pooling_model, seed=0, Debug=False, \
+          reasoning_strategy='random', switch=40):
     
     start = time()
     print '-' * 50
@@ -58,7 +59,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     num_feat = X_pool.shape[1]
     
     num_a_feat_chosen = np.zeros(num_feat)
-    
+           
     if selection_strategy == 'random':
         doc_pick_model = RandomStrategy(seed)
     elif selection_strategy == 'uncertaintyIM':
@@ -95,7 +96,11 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             optimize="I", seed=seed, Debug=Debug)
     elif selection_strategy == "optaucF":
         doc_pick_model = OptimizeAUC(X_test, y_test, feature_expert, \
-            optimize="F", seed=seed, Debug=Debug)
+            optimize="F", seed=seed, Debug=Debug)   
+    elif selection_strategy == 'reasoning_then_featureCertainty':
+        doc_pick_model = ReasoningThenFeatureCertainty(feature_expert, instance_model, \
+            feature_model, switch=switch, reasoning_strategy=reasoning_strategy, y=y_pool, type='unknown', \
+            seed=seed, Debug=Debug)
     else:
         raise ValueError('Selection strategy: \'%s\' invalid!' % selection_strategy)
     
@@ -131,7 +136,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
                 doc_pick_model.update(X_pool, feature, y_pool[doc])
             elif selection_strategy == 'cover_then_disagree' and doc_pick_model.phase == 'covering':
                 doc_pick_model.covering.update(X_pool, feature, doc)
-        
+                    
         pooling_model.fit(instance_model, feature_model, weights=[0.5, 0.5]) # train pooling_model
         
         (accu, auc) = evaluate_model(instance_model, X_test, y_test)
@@ -160,8 +165,11 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     else:
         if selection_strategy.startswith('uncertainty') or selection_strategy == 'disagreement':
             raise ValueError('\'%s\' requires bootstrapping!' % selection_strategy)            
-    
+       
+
     for i in range(budget):
+        train_set_size=len(training_set)
+
         # Choose a document based on the strategy chosen
         if selection_strategy == 'cover_then_disagree':
             doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
@@ -169,6 +177,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
         elif selection_strategy.startswith('optauc'):
             doc_id = doc_pick_model.choice(X_pool, y_pool, pool_set, training_set, feature_model)
+        elif selection_strategy == 'reasoning_then_featureCertainty':
+            doc_id = doc_pick_model.choice(X_pool, i+1, pool_set, train_set_size)
         else:
             doc_id = doc_pick_model.choice(X_pool, pool_set)
         
@@ -293,7 +303,8 @@ def load_dataset(dataset):
         return (X_pool, y_pool, X_test, y_test, None)
     
 def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smoothing, \
-                bootstrap_size, balance, coverage, disagree_strat, budget, fmtype, seed=0, Debug=False):
+                bootstrap_size, balance, coverage, disagree_strat, budget, fmtype, seed=0, Debug=False, \
+                reasoning_strategy='random', switch=40):
     
     (X_pool, y_pool, X_test, y_test, feat_names) = load_dataset(dataset)
     
@@ -331,7 +342,8 @@ def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smooth
         
         result[i] = learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, \
             fe, selection_strategy, disagree_strat, coverage, budget, instance_model, \
-            feature_model, pooling_model, trial_seed, Debug)
+            feature_model, pooling_model, trial_seed, Debug, \
+            reasoning_strategy, switch)
     
     return result, feat_names, feat_freq
 
@@ -563,8 +575,11 @@ if __name__ == '__main__':
                         help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
     parser.add_argument('-strategy', choices=['random', 'uncertaintyIM', 'uncertaintyFM', \
                         'uncertaintyPM', 'disagreement', 'covering', 'covering_fewest', \
-                        'cheating', 'cover_then_disagree', 'cover_then_uncertainty', 'optaucP', 'optaucI', 'optaucF'], default='random', \
+                        'cheating', 'cover_then_disagree', 'cover_then_uncertainty', 'optaucP', 'optaucI', 'optaucF', 'reasoning_then_featureCertainty'], default='random', \
                         help='Document selection strategy to be used')
+    parser.add_argument('-reasoningStrategy', choices=['random', 'uncertaintyIM', 'uncertaintyPM'], default='random', \
+                        help='Reasoning strategy to be used for reasoning_then_disagreement')
+    parser.add_argument('-switch', type=int, default=38, help='After how many documents to switch from reasoning to FM Uncertainty')
     parser.add_argument('-metric', choices=['mutual_info', 'L1'], default="L1", \
                         help='Specifying the type of feature expert to be used')
     parser.add_argument('-c', type=float, default=0.1, help='Penalty term for the L1 feature expert')
@@ -586,7 +601,8 @@ if __name__ == '__main__':
                 metric=args.metric, C=args.c, alpha=args.alpha, smoothing=args.smoothing, \
                 bootstrap_size=args.bootstrap, balance=args.balance, coverage=args.coverage, \
                 disagree_strat=args.disagree_metric, budget=args.budget/args.cost, \
-                fmtype=args.fmtype, seed=args.seed, Debug=args.debug)
+                fmtype=args.fmtype, seed=args.seed, Debug=args.debug, \
+                reasoning_strategy=args.reasoningStrategy, switch=args.switch)
     
     if args.strategy == 'cover_then_disagree':
         save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), '{:d}trials'.format(args.trials), 'result.txt']))
