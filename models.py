@@ -88,3 +88,65 @@ class PoolingMNB(MultinomialNB):
                                         weights[1]*np.exp(mnb2.feature_log_prob_))
         self.class_log_prior_ = mnb1.class_log_prior_
         self.classes_ = mnb1.classes_
+
+class ReasoningMNB(MultinomialNB):
+    """
+    A MultinomialNB implementation where the reason (the annotated feature)
+    provided by an expert is weighed more than the remaining features.
+    """
+    
+    def __init__(self, alpha=1.0, num_classes=2):
+        self.alpha = alpha
+        self.num_classes = num_classes
+        self.partial_fit_first_call = True  
+         
+    def partial_fit(self, x, y, f, w):
+        """ Incremental fit on a single object.
+        
+        Parameters
+        ----------
+        x: the object.
+        y: the object's label
+        f: the annotated feature. Can be None
+        w: weight for the non-annotated features
+        
+        Returns
+        -------
+        self : object
+            Returns self.
+        """
+        if x.shape[0] != 1:
+            msg = "x must be a single object. Passed %d objects."
+            raise ValueError(msg % (x.shape[0]))
+        
+        if x.shape[0] != y.shape[0]:
+            msg = "x.shape[0]=%d and y.shape[0]=%d are incompatible."
+            raise ValueError(msg % (x.shape[0], y.shape[0]))
+        
+        
+        _, n_features = x.shape
+        
+        if self.partial_fit_first_call:
+            self.class_count_ = np.zeros(self.num_classes, dtype=np.float64)
+            self.feature_count_ = np.zeros((self.num_classes, n_features),
+                                           dtype=np.float64)
+            self.partial_fit_first_call = False
+        
+        self.class_count_[y] += 1
+        
+        #all features
+        self.feature_count_[y] += w*x[0]
+        
+        #the annotated feature
+        if f:
+            self.feature_count_[y][f] += (1-w)*x[0,f]
+        
+        self._update_feature_log_prob()
+        self._update_class_log_prior()
+        return self
+    
+    def fit(self, X, y, sample_weight=None, class_prior=None):
+        raise NotImplementedError("This class does not allow batch fitting.")
+        
+        
+        
