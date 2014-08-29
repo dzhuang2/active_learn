@@ -488,8 +488,12 @@ def save_result(result, filename='result.txt'):
             ls_all_results.append(feature_counts['class0'])
             ls_all_results.append(feature_counts['class1'])
             ls_all_results.append(covered_docs)
-            ls_all_results.append([transition])
+            if result.shape[0] == 1 and isinstance(transition, list):
+                ls_transitions = transition
+            else:
+                ls_transitions.append(transition)
         
+        ls_all_results.append(ls_transitions)
         header = 'train#\tIM_accu\tFM_accu\tPM_accu\tIM_auc\tFM_auc\tPM_auc\tc0_feat\tc1_feat\tdocs_covered\ttransition'
         f.write('\t'.join([header]*result.shape[0]) + '\n')
         for row in map(None, *ls_all_results):
