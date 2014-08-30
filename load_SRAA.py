@@ -37,5 +37,6 @@ def load_SRAA(AVI_HOME='./SRAA/partition1/data', percent=1./3, rnd=2342, \
     pickle.dump(y_te, open('SRAA_y_test.pickle', 'wb'))
     pickle.dump(data.train.data, open('SRAA_X_train_corpus.pickle', 'wb'))
     pickle.dump(data.test.data, open('SRAA_X_test_corpus.pickle', 'wb'))
+    pickle.dump(vect.get_feature_names(), open('SRAA_feature_names.pickle', 'wb'))
     
     return (X_tr, y_tr, X_te, y_te, data.train.data, data.test.data)
