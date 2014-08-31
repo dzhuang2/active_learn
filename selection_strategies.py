@@ -624,6 +624,8 @@ def load_Debug_data(top_n=10, min_df=5, max_df=1.0, binary=True, ngram_range=(1,
     feature_names = np.array(vect.get_feature_names())
     return (top_n, X_pool, y_pool, X_pool_docs, feature_names)
 
+import copy
+
 class OptimizeAUC(object):
     '''
     This class chooses the instance that is expected to lead to the maximum achievable AUC
@@ -640,7 +642,7 @@ class OptimizeAUC(object):
         self.Debug = Debug
         
     
-    def choice(self, X, y, pool, train_indices, current_feature_model):
+    def choice(self, X, y, pool, train_indices, current_feature_model, current_reasoning_model, w_n, w_a):
         
         rand_indices = self.rgen.permutation(len(pool))
         candidates = [pool[i] for i in rand_indices[:self.sub_pool]]
@@ -654,7 +656,7 @@ class OptimizeAUC(object):
             # train an instance model
             instance_model = MultinomialNB(alpha=1.)
             instance_model.fit(X[new_train_indices], y[new_train_indices])
-            
+                     
             # train a feature model
             
             feature_model = None
@@ -671,6 +673,11 @@ class OptimizeAUC(object):
                 feature_model.fit(top_feat, y[doc]) # fit also calls update; so there is no need to update again
             else:
                 feature_model.update()
+                
+            # make a deep copy of the reasoning model and partial train it
+            
+            reasoning_model = copy.deepcopy(current_reasoning_model)
+            reasoning_model.partial_fit(X[doc], y[doc], top_feat, w_n, w_a)
             
             # pooling model
             
@@ -687,6 +694,8 @@ class OptimizeAUC(object):
                 opt_model = instance_model
             elif self.optimize == "F":
                 opt_model = feature_model
+            elif self.optimize == "R":
+                opt_model = reasoning_model
             else:
                 raise ValueError('Optimization Model: \'%s\' invalid!' % self.optimize)
             

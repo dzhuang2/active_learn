@@ -97,7 +97,10 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             optimize="I", seed=seed, Debug=Debug)
     elif selection_strategy == "optaucF":
         doc_pick_model = OptimizeAUC(X_test, y_test, feature_expert, \
-            optimize="F", seed=seed, Debug=Debug)   
+            optimize="F", seed=seed, Debug=Debug)
+    elif selection_strategy == "optaucR":
+        doc_pick_model = OptimizeAUC(X_test, y_test, feature_expert, \
+            optimize="R", seed=seed, Debug=Debug)  
     elif selection_strategy == 'reasoning_then_featureCertainty':
         doc_pick_model = ReasoningThenFeatureCertainty(feature_expert, instance_model, \
             feature_model, switch=switch, reasoning_strategy=reasoning_strategy, y=y_pool, type='unknown', \
@@ -184,7 +187,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         elif selection_strategy == 'cover_then_uncertainty':
             doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
         elif selection_strategy.startswith('optauc'):
-            doc_id = doc_pick_model.choice(X_pool, y_pool, pool_set, training_set, feature_model)
+            doc_id = doc_pick_model.choice(X_pool, y_pool, pool_set, training_set, feature_model, reasoning_model, rmw_n, rmw_a)
         elif selection_strategy == 'reasoning_then_featureCertainty':
             doc_id = doc_pick_model.choice(X_pool, i+1, pool_set, train_set_size)
         else:
@@ -601,7 +604,8 @@ if __name__ == '__main__':
                         help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
     parser.add_argument('-strategy', choices=['random', 'uncertaintyIM', 'uncertaintyFM', \
                         'uncertaintyPM', 'disagreement', 'covering', 'covering_fewest', \
-                        'cheating', 'cover_then_disagree', 'cover_then_uncertainty', 'optaucP', 'optaucI', 'optaucF', 'reasoning_then_featureCertainty'], default='random', \
+                        'cheating', 'cover_then_disagree', 'cover_then_uncertainty', \
+                        'optaucP', 'optaucI', 'optaucF', 'optaucR', 'reasoning_then_featureCertainty'], default='random', \
                         help='Document selection strategy to be used')
     parser.add_argument('-reasoningStrategy', choices=['random', 'uncertaintyIM', 'uncertaintyPM'], default='random', \
                         help='Reasoning strategy to be used for reasoning_then_disagreement')
