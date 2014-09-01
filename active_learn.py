@@ -12,7 +12,8 @@ from sklearn import metrics
 from sklearn.datasets import load_svmlight_file
 from feature_expert import feature_expert
 from selection_strategies import RandomBootstrap, RandomStrategy, UNCSampling, DisagreementStrategy
-from selection_strategies import CoveringStrategy, CheatingApproach, CoveringThenDisagreement, CoverThenUncertainty, ReasoningThenFeatureCertainty
+from selection_strategies import CoveringStrategy, CheatingApproach, CoveringThenDisagreement, CoverThenUncertainty, \
+    ReasoningThenFeatureCertainty, CoverThenFeatureCertainty
 from selection_strategies import OptimizeAUC
 
 import warnings
@@ -69,6 +70,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         doc_pick_model = UNCSampling(feature_model, feature_expert, y_pool, Debug)
     elif selection_strategy == 'uncertaintyPM':
         doc_pick_model = UNCSampling(pooling_model, feature_expert, y_pool, Debug)
+    elif selection_strategy == 'uncertaintyRM':
+        doc_pick_model = UNCSampling(reasoning_model, feature_expert, y_pool, Debug)
     elif selection_strategy == 'disagreement':
         doc_pick_model = DisagreementStrategy(instance_model, feature_model, \
             feature_expert, y_pool, disagree_strat, Debug=Debug)
@@ -85,8 +88,16 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         doc_pick_model = CoveringThenDisagreement(feature_expert, instance_model, \
             feature_model, num_samples, percentage=coverage, y=y_pool, type='unknown', \
             metric=disagree_strat, seed=seed, Debug=Debug)
-    elif selection_strategy == 'cover_then_uncertainty':
+    elif selection_strategy == 'cover_then_uncertaintyPM':
         doc_pick_model = CoverThenUncertainty(feature_expert, pooling_model, \
+            num_samples, percentage=coverage, y=y_pool, type='unknown', \
+            seed=seed, Debug=Debug)
+    elif selection_strategy == 'cover_then_uncertaintyRM':
+        doc_pick_model = CoverThenUncertainty(feature_expert, reasoning_model, \
+            num_samples, percentage=coverage, y=y_pool, type='unknown', \
+            seed=seed, Debug=Debug)
+    elif selection_strategy == 'cover_then_featureCertainty':
+        doc_pick_model = CoverThenFeatureCertainty(feature_expert, feature_model, \
             num_samples, percentage=coverage, y=y_pool, type='unknown', \
             seed=seed, Debug=Debug)
     elif selection_strategy == "optaucP":
@@ -184,7 +195,9 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         # Choose a document based on the strategy chosen
         if selection_strategy == 'cover_then_disagree':
             doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
-        elif selection_strategy == 'cover_then_uncertainty':
+        elif selection_strategy.startswith('cover_then_uncertainty'):
+            doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
+        elif selection_strategy == 'cover_then_featureCertainty':
             doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
         elif selection_strategy.startswith('optauc'):
             doc_id = doc_pick_model.choice(X_pool, y_pool, pool_set, training_set, feature_model, reasoning_model, rmw_n, rmw_a)
@@ -579,7 +592,7 @@ def save_result_num_a_feat_chosen(result, feat_names, feat_freq):
         num_a_feat_chosen = result[i][-1]
         ave_num_a_feat_chosen += (num_a_feat_chosen / float(args.trials))
     
-    filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, "num_a_feat_chosen", 'result.txt'])
+    filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'w_a={:0.2f}'.format(args.rmw_a), 'w_n={:0.2f}'.format(args.rmw_n), "num_a_feat_chosen", 'result.txt'])
     
     print '-' * 50
     print 'saving result into \'%s\'' % filename
@@ -603,9 +616,10 @@ if __name__ == '__main__':
     parser.add_argument('-dataset', default=['imdb'], nargs='*', \
                         help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
     parser.add_argument('-strategy', choices=['random', 'uncertaintyIM', 'uncertaintyFM', \
-                        'uncertaintyPM', 'disagreement', 'covering', 'covering_fewest', \
+                        'uncertaintyPM', 'uncertaintyRM', 'disagreement', 'covering', 'covering_fewest', \
                         'cheating', 'cover_then_disagree', 'cover_then_uncertainty', \
-                        'optaucP', 'optaucI', 'optaucF', 'optaucR', 'reasoning_then_featureCertainty'], default='random', \
+                        'optaucP', 'optaucI', 'optaucF', 'optaucR', 'reasoning_then_featureCertainty', \
+                        'cover_then_uncertaintyRM', 'cover_then_featureCertainty'], default='random', \
                         help='Document selection strategy to be used')
     parser.add_argument('-reasoningStrategy', choices=['random', 'uncertaintyIM', 'uncertaintyPM'], default='random', \
                         help='Reasoning strategy to be used for reasoning_then_disagreement')
@@ -637,12 +651,11 @@ if __name__ == '__main__':
                 fmtype=args.fmtype, rmw_n=args.rmw_n, rmw_a=args.rmw_a, seed=args.seed, Debug=args.debug, \
                 reasoning_strategy=args.reasoningStrategy, switch=args.switch)
     
-    if args.strategy == 'cover_then_disagree':
-        save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), '{:d}trials'.format(args.trials), 'result.txt']))
-        save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), 'averaged', 'result.txt']))
+    if args.strategy.startswith('cover_then_'):
+        save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), '{:d}trials'.format(args.trials), 'w_a={:0.2f}'.format(args.rmw_a), 'w_n={:0.2f}'.format(args.rmw_n), 'result.txt']))
+        save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), 'w_a={:0.2f}'.format(args.rmw_a), 'w_n={:0.2f}'.format(args.rmw_n), 'averaged', 'result.txt']))    
     else:
-        save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:d}trials'.format(args.trials), 'result.txt']))
-        save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'averaged', 'result.txt']))
+        save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:d}trials'.format(args.trials), 'w_a={:0.2f}'.format(args.rmw_a), 'w_n={:0.2f}'.format(args.rmw_n), 'result.txt']))
+        save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'w_a={:0.2f}'.format(args.rmw_a), 'w_n={:0.2f}'.format(args.rmw_n), 'averaged', 'result.txt']))
     
     save_result_num_a_feat_chosen(result, feat_names, feat_freq)
-
