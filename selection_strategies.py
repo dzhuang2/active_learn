@@ -68,7 +68,7 @@ class UNCSampling(object):
     '''
     This class performs uncertainty sampling based on the model
     
-    The model used is either instance_model, feature_model or pooling_model
+    The model used is either instance_model, feature_model, pooling_model or reasoning_model
     '''
     def __init__(self, model, feature_expert, y, Debug=False):
         self.model = model
@@ -559,10 +559,15 @@ class CoveringThenDisagreement(object):
         return doc_id
 
 class CoverThenUncertainty(object):
-    def __init__(self, feature_expert, pooling_model, num_samples, percentage, y, \
+    '''
+    This class performs covering and then uncertainty sampling based on the model
+    
+    The model used is either pooling_model or reasoning_model
+    '''
+    def __init__(self, feature_expert, model, num_samples, percentage, y, \
                  type='unknown', seed=0, Debug=False):
         self.covering = CoveringStrategy(feature_expert, num_samples, y, type, seed, Debug)
-        self.uncertainty = UNCSampling(pooling_model, feature_expert, y, Debug)
+        self.uncertainty = UNCSampling(model, feature_expert, y, Debug)
         self.phase = 'covering'
         self.min_docs_covered = num_samples * percentage
         self.transition = None
@@ -580,7 +585,35 @@ class CoverThenUncertainty(object):
             doc_id = self.uncertainty.choice(X, pool)
         
         return doc_id
+       
+class CoverThenFeatureCertainty(object):
+    def __init__(self, feature_expert, feature_model, num_samples, percentage, y, \
+                 type='unknown', seed=0, Debug=False):
+        self.covering = CoveringStrategy(feature_expert, num_samples, y, type, seed, Debug)
+        self.feature_certainty = FeatureCertaintyStrategy(feature_model, feature_expert, y, Debug)
+        self.phase = 'covering'
+        self.min_docs_covered = num_samples * percentage
+        self.transition = None
+        self.certainClass=0                      
+
+    def choice(self, X, num, pool):
+        if self.phase == 'covering':           
+            doc_id = self.covering.choice(X, pool)               
+            docs_covered = np.nonzero(self.covering.docs_feature_count > 0)[0].shape[0]
+            if doc_id == None or docs_covered > self.min_docs_covered:
+                self.phase = 'featureCertainty'
+                self.transition = num
+                print 'covering transition happens at sample #%d' % num
         
+        if self.phase == 'featureCertainty':
+            doc_id = self.feature_certainty.choice(X, pool,self.certainClass)
+            # alternate between picking class0 certain document class1 certain document
+            if self.certainClass==0:
+                self.certainClass=1
+            else:
+                self.certainClass==0
+        
+        return doc_id 
 
 class ReasoningThenFeatureCertainty(object):
     def __init__(self, feature_expert, instance_model, feature_model, switch, \
