@@ -152,7 +152,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
                 doc_pick_model.update(X_pool, feature, doc)
             elif selection_strategy == 'cheating':
                 doc_pick_model.update(X_pool, feature, y_pool[doc])
-            elif selection_strategy == 'cover_then_disagree' and doc_pick_model.phase == 'covering':
+            elif selection_strategy.startswith('cover_then') and doc_pick_model.phase == 'covering':
                 doc_pick_model.covering.update(X_pool, feature, doc)
                     
         pooling_model.fit(instance_model, feature_model, weights=[0.5, 0.5]) # train pooling_model
@@ -193,12 +193,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         train_set_size=len(training_set)
 
         # Choose a document based on the strategy chosen
-        if selection_strategy == 'cover_then_disagree':
-            doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
-        elif selection_strategy.startswith('cover_then_uncertainty'):
-            doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
-        elif selection_strategy == 'cover_then_featureCertainty':
-            doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)
+        if selection_strategy.startswith('cover_then'):
+            doc_id = doc_pick_model.choice(X_pool, i+1, pool_set)        
         elif selection_strategy.startswith('optauc'):
             doc_id = doc_pick_model.choice(X_pool, y_pool, pool_set, training_set, feature_model, reasoning_model, rmw_n, rmw_a)
         elif selection_strategy == 'reasoning_then_featureCertainty':
