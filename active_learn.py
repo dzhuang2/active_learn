@@ -388,41 +388,49 @@ def average_results(result):
     num_trials = result.shape[0]
     
     if num_trials == 1:
-        return result
+        num_training_set, IM_scores, FM_scores, PM_scores, RM_scores, feature_counts, covered_docs, transition, num_a_feat_chosen = result[0]
+        return np.array([(num_training_set, IM_scores, FM_scores, PM_scores, RM_scores, feature_counts, \
+                          covered_docs, [transition], num_a_feat_chosen)])
     
     ls_transitions = []
+    
+    min_training_samples = np.inf
+    for i in range(num_trials):
+        # result[i][0] is the num_training_set
+        min_training_samples = min(result[i][0].shape[0], min_training_samples)
     
     for i in range(num_trials):
         num_training_set, IM_scores, FM_scores, PM_scores, RM_scores, feature_counts, covered_docs, transition, num_a_feat_chosen = result[i]
         if i == 0:
-            avg_IM_scores['accu'] = np.array(IM_scores['accu'])
-            avg_IM_scores['auc'] = np.array(IM_scores['auc'])
-            avg_FM_scores['accu'] = np.array(FM_scores['accu'])
-            avg_FM_scores['auc'] = np.array(FM_scores['auc'])
-            avg_PM_scores['accu'] = np.array(PM_scores['accu'])
-            avg_PM_scores['auc'] = np.array(PM_scores['auc'])
-            avg_RM_scores['accu'] = np.array(RM_scores['accu'])
-            avg_RM_scores['auc'] = np.array(RM_scores['auc'])
-            avg_discovered_feature_counts['class0'] = np.array(feature_counts['class0'])
-            avg_discovered_feature_counts['class1'] = np.array(feature_counts['class1'])
-            num_docs_covered = np.array(covered_docs)
-            ave_num_a_feat_chosen = np.array(num_a_feat_chosen)
+            avg_IM_scores['accu'] = np.array(IM_scores['accu'])[:min_training_samples]
+            avg_IM_scores['auc'] = np.array(IM_scores['auc'])[:min_training_samples]
+            avg_FM_scores['accu'] = np.array(FM_scores['accu'])[:min_training_samples]
+            avg_FM_scores['auc'] = np.array(FM_scores['auc'])[:min_training_samples]
+            avg_PM_scores['accu'] = np.array(PM_scores['accu'])[:min_training_samples]
+            avg_PM_scores['auc'] = np.array(PM_scores['auc'])[:min_training_samples]
+            avg_RM_scores['accu'] = np.array(RM_scores['accu'])[:min_training_samples]
+            avg_RM_scores['auc'] = np.array(RM_scores['auc'])[:min_training_samples]
+            avg_discovered_feature_counts['class0'] = np.array(feature_counts['class0'])[:min_training_samples]
+            avg_discovered_feature_counts['class1'] = np.array(feature_counts['class1'])[:min_training_samples]
+            num_docs_covered = np.array(covered_docs)[:min_training_samples]
+            ave_num_a_feat_chosen = np.array(num_a_feat_chosen)[:min_training_samples]
         else:
-            avg_IM_scores['accu'] += np.array(IM_scores['accu'])
-            avg_IM_scores['auc'] += np.array(IM_scores['auc'])
-            avg_FM_scores['accu'] += np.array(FM_scores['accu'])
-            avg_FM_scores['auc'] += np.array(FM_scores['auc'])
-            avg_PM_scores['accu'] += np.array(PM_scores['accu'])
-            avg_PM_scores['auc'] += np.array(PM_scores['auc'])
-            avg_RM_scores['accu'] += np.array(RM_scores['accu'])
-            avg_RM_scores['auc'] += np.array(RM_scores['auc'])
-            avg_discovered_feature_counts['class0'] += np.array(feature_counts['class0'])
-            avg_discovered_feature_counts['class1'] += np.array(feature_counts['class1'])
-            num_docs_covered += np.array(covered_docs)            
-            ave_num_a_feat_chosen += num_a_feat_chosen
+            avg_IM_scores['accu'] += np.array(IM_scores['accu'])[:min_training_samples]
+            avg_IM_scores['auc'] += np.array(IM_scores['auc'])[:min_training_samples]
+            avg_FM_scores['accu'] += np.array(FM_scores['accu'])[:min_training_samples]
+            avg_FM_scores['auc'] += np.array(FM_scores['auc'])[:min_training_samples]
+            avg_PM_scores['accu'] += np.array(PM_scores['accu'])[:min_training_samples]
+            avg_PM_scores['auc'] += np.array(PM_scores['auc'])[:min_training_samples]
+            avg_RM_scores['accu'] += np.array(RM_scores['accu'])[:min_training_samples]
+            avg_RM_scores['auc'] += np.array(RM_scores['auc'])[:min_training_samples]
+            avg_discovered_feature_counts['class0'] += np.array(feature_counts['class0'])[:min_training_samples]
+            avg_discovered_feature_counts['class1'] += np.array(feature_counts['class1'])[:min_training_samples]
+            num_docs_covered += np.array(covered_docs)[:min_training_samples]
+            ave_num_a_feat_chosen += num_a_feat_chosen[:min_training_samples]
         
         ls_transitions.append(transition)
             
+    num_training_set = num_training_set[:min_training_samples]
     avg_IM_scores['accu'] = avg_IM_scores['accu'] / num_trials
     avg_IM_scores['auc'] = avg_IM_scores['auc'] / num_trials
     avg_FM_scores['accu'] = avg_FM_scores['accu'] / num_trials
@@ -539,11 +547,10 @@ def save_result(result, filename='result.txt'):
             ls_all_results.append(feature_counts['class1'])
             ls_all_results.append(covered_docs)
             if result.shape[0] == 1 and isinstance(transition, list):
-                ls_transitions = transition
+                ls_all_results.append(ls_transitions)
             else:
-                ls_transitions.append(transition)
+                ls_all_results.append([transition])
         
-        ls_all_results.append(ls_transitions)
         header = 'train#\tIM_accu\tFM_accu\tPM_accu\tRM_accu\tIM_auc\tFM_auc\tPM_auc\tRM_auc\tc0_feat\tc1_feat\tdocs_covered\ttransition'
         f.write('\t'.join([header]*result.shape[0]) + '\n')
         for row in map(None, *ls_all_results):
