@@ -250,11 +250,9 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             doc_pick_model.update(X_pool, feature, doc_id)
         elif selection_strategy == 'cheating':
             doc_pick_model.update(X_pool, feature, label)
-        elif selection_strategy == 'cover_then_disagree' and doc_pick_model.phase == 'covering':
+        elif selection_strategy.startswith('cover_then') and doc_pick_model.phase == 'covering':
             doc_pick_model.covering.update(X_pool, feature, doc_id)
-        elif selection_strategy == 'cover_then_uncertainty' and doc_pick_model.phase == 'covering':
-            doc_pick_model.covering.update(X_pool, feature, doc_id)
-        
+                
 #        print 'covering_fewest features: %d, feature model features: %d' % (len(doc_pick_model.annotated_features), len(feature_model.class0_features + feature_model.class1_features))
 
         # Evaluate performance based on Instance Model
@@ -289,12 +287,11 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         # docs covered        
         num_docs_covered.append(len(covered_docs))
     
-    if isinstance(doc_pick_model, CoveringThenDisagreement):
-        transition = doc_pick_model.transition
-    elif isinstance(doc_pick_model, CoverThenUncertainty):
+    if selection_strategy.startswith('cover_then'):
         transition = doc_pick_model.transition
     else:
         transition = None
+    
     
     # compute the # of training samples for plot
     if training_set_empty:
@@ -595,7 +592,7 @@ def save_result_num_a_feat_chosen(result, feat_names, feat_freq):
         num_a_feat_chosen = result[i][-1]
         ave_num_a_feat_chosen += (num_a_feat_chosen / float(args.trials))
     
-    filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'w_a={:0.2f}'.format(args.rmw_a), 'w_n={:0.2f}'.format(args.rmw_n), "num_a_feat_chosen", 'result.txt'])
+    filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:0.2f}coverage'.format(args.coverage), 'w_a={:0.2f}'.format(args.rmw_a), 'w_n={:0.2f}'.format(args.rmw_n), "num_a_feat_chosen", 'result.txt'])
     
     print '-' * 50
     print 'saving result into \'%s\'' % filename
