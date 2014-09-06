@@ -13,7 +13,7 @@ from sklearn.datasets import load_svmlight_file
 from feature_expert import feature_expert
 from selection_strategies import RandomBootstrap, RandomStrategy, UNCSampling, DisagreementStrategy
 from selection_strategies import CoveringStrategy, CheatingApproach, CoveringThenDisagreement, CoverThenUncertainty, \
-    ReasoningThenFeatureCertainty, CoverThenFeatureCertainty
+    ReasoningThenFeatureCertainty, CoverThenFeatureCertainty, UNCForInsufficientReason
 from selection_strategies import OptimizeAUC
 
 import warnings
@@ -61,6 +61,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     num_feat = X_pool.shape[1]
     
     num_a_feat_chosen = np.zeros(num_feat)
+    
+    discovered_features = set()
            
     if selection_strategy == 'random':
         doc_pick_model = RandomStrategy(seed)
@@ -116,6 +118,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         doc_pick_model = ReasoningThenFeatureCertainty(feature_expert, instance_model, \
             feature_model, switch=switch, reasoning_strategy=reasoning_strategy, y=y_pool, type='unknown', \
             seed=seed, Debug=Debug)
+    elif selection_strategy == "unc_insuff_R":
+        doc_pick_model = UNCForInsufficientReason(reasoning_model)
     else:
         raise ValueError('Selection strategy: \'%s\' invalid!' % selection_strategy)
     
@@ -134,7 +138,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             feature = feature_expert.most_informative_feature(X_pool[doc], y_pool[doc])
             
             if feature:
-                feature_model.fit(feature, y_pool[doc]) # train feature_model one by one            
+                feature_model.fit(feature, y_pool[doc]) # train feature_model one by one
+                discovered_features.add(feature)            
             
             # Reasoning model
             reasoning_model.partial_fit(X_pool[doc], y_pool[doc], feature, rmw_n, rmw_a) # train feature_model one by one
@@ -199,6 +204,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             doc_id = doc_pick_model.choice(X_pool, y_pool, pool_set, training_set, feature_model, reasoning_model, rmw_n, rmw_a)
         elif selection_strategy == 'reasoning_then_featureCertainty':
             doc_id = doc_pick_model.choice(X_pool, i+1, pool_set, train_set_size)
+        elif selection_strategy == "unc_insuff_R":
+            doc_id = doc_pick_model.choice(X_pool, pool_set, discovered_features, max_num_feats=1)
         else:
             doc_id = doc_pick_model.choice(X_pool, pool_set)
         
@@ -228,6 +235,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         # Update the feature model
         if feature:
             feature_model.fit(feature, label)
+            discovered_features.add(feature)
             
         reasoning_model.partial_fit(X_pool[doc_id], y_pool[doc_id], feature, rmw_n, rmw_a) # train feature_model one by one
         
@@ -308,7 +316,7 @@ def load_dataset(dataset):
         #(X_pool, y_pool, X_test, y_test) = load_data()
         #vect = CountVectorizer(min_df=0.005, max_df=1./3, binary=True, ngram_range=(1,1))
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1,1))        
-        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='./aclImdb', shuffle=True, vectorizer=vect)
+        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='C:\\Users\\mbilgic\\Desktop\\aclImdb', shuffle=True, vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test, vect.get_feature_names())
     elif isinstance(dataset, list) and len(dataset) == 3 and dataset[0] == '20newsgroups':
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
@@ -619,12 +627,12 @@ if __name__ == '__main__':
                         'uncertaintyPM', 'uncertaintyRM', 'disagreement', 'covering', 'covering_fewest', \
                         'cheating', 'cover_then_disagree', 'cover_then_uncertainty', \
                         'optaucP', 'optaucI', 'optaucF', 'optaucR', 'reasoning_then_featureCertainty', \
-                        'cover_then_uncertaintyRM', 'cover_then_featureCertainty'], default='random', \
+                        'cover_then_uncertaintyRM', 'cover_then_featureCertainty', 'unc_insuff_R'], default='random', \
                         help='Document selection strategy to be used')
     parser.add_argument('-reasoningStrategy', choices=['random', 'uncertaintyIM', 'uncertaintyPM'], default='random', \
                         help='Reasoning strategy to be used for reasoning_then_disagreement')
     parser.add_argument('-switch', type=int, default=38, help='After how many documents to switch from reasoning to FM Uncertainty')
-    parser.add_argument('-metric', choices=['mutual_info', 'L1'], default="L1", \
+    parser.add_argument('-metric', choices=['mutual_info', 'chi2', 'L1'], default="L1", \
                         help='Specifying the type of feature expert to be used')
     parser.add_argument('-c', type=float, default=0.1, help='Penalty term for the L1 feature expert')
     parser.add_argument('-debug', action='store_true', help='Enable Debugging')

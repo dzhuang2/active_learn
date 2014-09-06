@@ -740,3 +740,24 @@ class OptimizeAUC(object):
         doc_id = candidates[np.argsort(aucs)[-1]]
         
         return doc_id
+
+class UNCForInsufficientReason(object):
+    '''
+    This class picks instances where the model is uncertain
+    because not enough "reasoning" exists
+    '''
+    def __init__(self, model):
+        self.model = model
+
+    
+    def choice(self, X, pool, discovered_feats, max_num_feats=1):
+        y_probas = self.model.predict_proba(X[pool])
+        uncerts = np.array(pool)[np.argsort(np.max(y_probas, axis=1))]
+        
+        for unc in uncerts:
+            x_feats = X[unc].indices
+            if len(discovered_feats.intersection(x_feats)) <= max_num_feats:
+                return unc
+        
+        return None
+        

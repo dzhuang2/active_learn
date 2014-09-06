@@ -9,6 +9,7 @@ import numpy as np
 import scipy.sparse as sp
 from sklearn import linear_model
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_selection import chi2
 import warnings
 warnings.filterwarnings("ignore", category=sp.SparseEfficiencyWarning)
 
@@ -35,12 +36,14 @@ class feature_expert(object):
         
         if metric == 'mutual_info':
             self.feature_rank = self.rank_by_mutual_information(X, y)
+        elif metric == 'chi2':
+            self.feature_rank = self.rank_by_chi2(X, y)
         elif metric == 'L1':
             self.feature_rank = self.L1_rank(C, X, y)
         elif metric == 'L1-count':
             self.feature_rank = self.rank_by_L1_weights(C, X, y)
         else:
-            raise ValueError('metric must be one of the following: \'mutual_info\', \'L1\', \'L1-count\'')
+            raise ValueError('metric must be one of the following: \'mutual_info\', \'chi2\', \'L1\', \'L1-count\'')
         
         print 'Feature Expert has deemed %d words to be of label 0' % len(self.feature_rank[0])
         print 'Feature Expert has deemed %d words to be of label 1' % len(self.feature_rank[1])
@@ -72,6 +75,16 @@ class feature_expert(object):
                                                  - np.log2(y_probs[j]))
         
         feature_rank = np.argsort(self.feature_mi_scores)[::-1]
+
+        return self.classify_features(feature_rank)
+    
+    def rank_by_chi2(self, X, y):
+        
+        self.feature_count = self.count_features(X, y)
+        
+        chi2_scores = chi2(X, y)
+        
+        feature_rank = np.argsort(chi2_scores[0])[::-1]
 
         return self.classify_features(feature_rank)
     
