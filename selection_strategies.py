@@ -760,4 +760,31 @@ class UNCForInsufficientReason(object):
                 return unc
         
         return None
+
+class UNCWithNoConflict(object):
+    '''
+    This class picks instances where the model is uncertain
+    though no conflict exists.
+    No conflict means this instance do not have annotated features
+    from opposing classes
+    '''
+    def __init__(self, model):
+        self.model = model
+
+    
+    def choice(self, X, pool, discovered_class0_feats, discovered_class1_feats):
+        y_probas = self.model.predict_proba(X[pool])
+        uncerts = np.array(pool)[np.argsort(np.max(y_probas, axis=1))]
+        
+        for unc in uncerts:
+            x_feats = X[unc].indices
+            x_class0_feats = discovered_class0_feats.intersection(x_feats)
+            x_class1_feats = discovered_class1_feats.intersection(x_feats)
+            
+            conflict = (len(x_class0_feats) > 0) and (len(x_class1_feats) > 0)
+            
+            if not conflict:
+                return unc
+        
+        return None
         

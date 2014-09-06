@@ -13,7 +13,7 @@ from sklearn.datasets import load_svmlight_file
 from feature_expert import feature_expert
 from selection_strategies import RandomBootstrap, RandomStrategy, UNCSampling, DisagreementStrategy
 from selection_strategies import CoveringStrategy, CheatingApproach, CoveringThenDisagreement, CoverThenUncertainty, \
-    ReasoningThenFeatureCertainty, CoverThenFeatureCertainty, UNCForInsufficientReason
+    ReasoningThenFeatureCertainty, CoverThenFeatureCertainty, UNCForInsufficientReason, UNCWithNoConflict
 from selection_strategies import OptimizeAUC
 
 import warnings
@@ -63,6 +63,11 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     num_a_feat_chosen = np.zeros(num_feat)
     
     discovered_features = set()
+    
+    discovered_class0_features = set()
+    
+    discovered_class1_features = set()
+    
            
     if selection_strategy == 'random':
         doc_pick_model = RandomStrategy(seed)
@@ -120,6 +125,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             seed=seed, Debug=Debug)
     elif selection_strategy == "unc_insuff_R":
         doc_pick_model = UNCForInsufficientReason(reasoning_model)
+    elif selection_strategy == "unc_no_conflict_R":
+        doc_pick_model = UNCWithNoConflict(reasoning_model)
     else:
         raise ValueError('Selection strategy: \'%s\' invalid!' % selection_strategy)
     
@@ -139,8 +146,12 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             
             if feature:
                 feature_model.fit(feature, y_pool[doc]) # train feature_model one by one
-                discovered_features.add(feature)            
-            
+                discovered_features.add(feature)                
+                if y_pool[doc] == 0:
+                    discovered_class0_features.add(feature)
+                else:
+                    discovered_class1_features.add(feature)
+                    
             # Reasoning model
             reasoning_model.partial_fit(X_pool[doc], y_pool[doc], feature, rmw_n, rmw_a) # train feature_model one by one
            
@@ -206,6 +217,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             doc_id = doc_pick_model.choice(X_pool, i+1, pool_set, train_set_size)
         elif selection_strategy == "unc_insuff_R":
             doc_id = doc_pick_model.choice(X_pool, pool_set, discovered_features, max_num_feats=1)
+        elif selection_strategy == "unc_no_conflict_R":
+            doc_id = doc_pick_model.choice(X_pool, pool_set, discovered_class0_features, discovered_class1_features)
         else:
             doc_id = doc_pick_model.choice(X_pool, pool_set)
         
@@ -236,6 +249,10 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         if feature:
             feature_model.fit(feature, label)
             discovered_features.add(feature)
+            if y_pool[doc_id] == 0:
+                discovered_class0_features.add(feature)
+            else:
+                discovered_class1_features.add(feature)
             
         reasoning_model.partial_fit(X_pool[doc_id], y_pool[doc_id], feature, rmw_n, rmw_a) # train feature_model one by one
         
@@ -627,7 +644,7 @@ if __name__ == '__main__':
                         'uncertaintyPM', 'uncertaintyRM', 'disagreement', 'covering', 'covering_fewest', \
                         'cheating', 'cover_then_disagree', 'cover_then_uncertainty', \
                         'optaucP', 'optaucI', 'optaucF', 'optaucR', 'reasoning_then_featureCertainty', \
-                        'cover_then_uncertaintyRM', 'cover_then_featureCertainty', 'unc_insuff_R'], default='random', \
+                        'cover_then_uncertaintyRM', 'cover_then_featureCertainty', 'unc_insuff_R', 'unc_no_conflict_R'], default='random', \
                         help='Document selection strategy to be used')
     parser.add_argument('-reasoningStrategy', choices=['random', 'uncertaintyIM', 'uncertaintyPM'], default='random', \
                         help='Reasoning strategy to be used for reasoning_then_disagreement')
