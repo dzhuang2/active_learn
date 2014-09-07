@@ -20,6 +20,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-dataset', default=['imdb'], nargs='*', \
                         help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
+    parser.add_argument('-metric', choices=['mutual_info', 'chi2', 'L1'], default="L1", \
+                        help='Specifying the type of feature expert to be used')
     parser.add_argument('-c', type=float, default=0.1, help='Penalty term for the L1 feature expert')
     args = parser.parse_args()
     
@@ -32,7 +34,7 @@ if __name__ == '__main__':
     
     feature_frequency = np.diff(X_pool.tocsc().indptr)
         
-    fe = feature_expert(X_pool, y_pool, metric="L1", smoothing=1e-6, C=args.c)
+    fe = feature_expert(X_pool, y_pool, metric=args.metric, smoothing=1e-6, C=args.c)
     
     print '-' * 50
     
@@ -58,10 +60,12 @@ if __name__ == '__main__':
     
     print '-' * 50
     
-    print "FEATURE FREQUENCIES, WEIGHTS, AND TOP_COUNTS"
+    print "FEATURE IDS, NAMES, FREQUENCIES, AND TOP COUNTS"
     
     print '-' * 50
     
+    print "ID\tNAME\tFREQ\tTOP_COUNT"
+    
     for f in range(num_feat):
-        print "%d\t%s\t%d\t%0.3f\t%d" %(f, str(feat_names[f]), feature_frequency[f], fe.L1_weights[f], the_top[f])
+        print "%d\t%s\t%d\t%d" %(f, feat_names[f].encode('utf8'), feature_frequency[f], the_top[f])
     
