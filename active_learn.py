@@ -69,7 +69,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     
     discovered_class1_features = set()
     
-    np.random.seed(seed)
+    feature_expert.rg.seed(seed)
            
     if selection_strategy == 'random':
         doc_pick_model = RandomStrategy(seed)
