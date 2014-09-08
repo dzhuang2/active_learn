@@ -29,8 +29,9 @@ class feature_expert(object):
         self.smoothing = smoothing
         self.feature_rank = ([], [])
         self.seed = seed
-        self.rg = np.random
-        self.rg.seed(seed)
+        self.rg = np.random.RandomState(seed)
+        #self.rg.seed(seed)
+        self.class1_prob = np.sum(y)/float(len(y))
         
         print '-' * 50
         print 'Starting Feature Expert Training ...'
@@ -132,10 +133,14 @@ class feature_expert(object):
         self.feature_count = self.count_features(X, y)
         
         chi2_scores = chi2(X, y)
-        
+                
         self.feature_scores = chi2_scores[0]
         
-        feature_rank = np.argsort(chi2_scores[0])[::-1]
+        nan_entries = np.nonzero(np.isnan(self.feature_scores))
+        
+        self.feature_scores[nan_entries] = 0
+        
+        feature_rank = np.argsort(self.feature_scores)[::-1]
 
         return self.classify_features(feature_rank)
     
@@ -167,6 +172,9 @@ class feature_expert(object):
         return self.classify_features(feature_rank)
     
     def classify_features(self, feature_rank):
+        return self.classify_features_through_expectation(feature_rank)
+    
+    def classify_features_through_counts(self, feature_rank):
         class0_features_rank = list()
         class1_features_rank = list()
         
@@ -177,6 +185,23 @@ class feature_expert(object):
                 class1_features_rank.append(f)
             # if positive and negative counts are tied, the feature is deemed
             # neither positive nor negative
+        
+        return (class0_features_rank, class1_features_rank)
+    
+    def classify_features_through_expectation(self, feature_rank):
+        class0_features_rank = list()
+        class1_features_rank = list()
+        
+        for f in feature_rank:
+            
+            total_count = self.feature_count[f,1,0] + self.feature_count[f,1,1]
+            expected_c1_count = total_count * self.class1_prob
+            
+            if expected_c1_count < self.feature_count[f,1,1]: # more class 1 than expected
+                class1_features_rank.append(f)
+            elif expected_c1_count > self.feature_count[f,1,1]: # fewer class 1 than expected
+                class0_features_rank.append(f)
+            # if exactly as expected, the feature is deemed neither positive nor negative
         
         return (class0_features_rank, class1_features_rank)
     
