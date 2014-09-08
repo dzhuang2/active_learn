@@ -787,4 +787,36 @@ class UNCWithNoConflict(object):
                 return unc
         
         return None
+
+class UNCPreferNoConflict(object):
+    '''
+    This class picks uncertain instances.
+    Whenever it can, it prefers instances that do not have conflicts.
+    No conflict means this instance do not have annotated features
+    from opposing classes.
+    '''
+    def __init__(self, model):
+        self.model = model
+
+    
+    def choice(self, X, pool, discovered_class0_feats, discovered_class1_feats, top_k=10):
+        y_probas = self.model.predict_proba(X[pool])
+        uncerts = np.array(pool)[np.argsort(np.max(y_probas, axis=1))]
+        
+        for unc in uncerts[:top_k]:
+            x_feats = X[unc].indices
+            x_class0_feats = discovered_class0_feats.intersection(x_feats)
+            x_class1_feats = discovered_class1_feats.intersection(x_feats)
+            
+            conflict = (len(x_class0_feats) > 0) and (len(x_class1_feats) > 0)
+            
+            if not conflict:
+                return unc
+        
+        # If here, an instance without conflict could not be found
+        # Return the top uncertain instance
+        #print "A no-conflict case was not found."
+        
+        return uncerts[0] 
+        
         
