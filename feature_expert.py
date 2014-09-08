@@ -23,7 +23,7 @@ class feature_expert(object):
         2. logistic regression with L1 regularization weights
     
     '''
-    def __init__(self, X, y, metric, smoothing=1e-6, C=0.1, seed=12345):
+    def __init__(self, X, y, metric, smoothing=1e-6, C=0.1, seed=12345, pick_only_top=False):
         self.sample_size, self.num_features = X.shape
         self.metric = metric
         self.smoothing = smoothing
@@ -44,6 +44,41 @@ class feature_expert(object):
             self.feature_rank = self.rank_by_L1_weights(C, X, y)
         else:
             raise ValueError('metric must be one of the following: \'mutual_info\', \'chi2\', \'L1\', \'L1-count\'')
+        
+        if pick_only_top:
+        
+            num_inst, num_feat = X.shape
+            
+            the_top = np.zeros(num_feat)
+        
+            for i in range(num_inst):
+                mif = self.most_informative_feature(X[i], y[i])
+                if mif:
+                    the_top[mif] += 1
+            
+            feature_frequency = np.diff(X.tocsc().indptr)
+            
+            include_feats = set()
+            
+            min_percent = 0.10
+            
+            for f in range(num_feat):
+                if the_top[f] / float(feature_frequency[f]) >= min_percent:
+                    include_feats.add(f)
+            
+            new_class0_feats = []
+            new_class1_feats = []
+            
+            for f in self.feature_rank[0]:
+                if f in include_feats:
+                    new_class0_feats.append(f)
+            
+            for f in self.feature_rank[1]:
+                if f in include_feats:
+                    new_class1_feats.append(f)
+            
+            self.feature_rank = (new_class0_feats, new_class1_feats)
+        
         
         print 'Feature Expert has deemed %d words to be of label 0' % len(self.feature_rank[0])
         print 'Feature Expert has deemed %d words to be of label 1' % len(self.feature_rank[1])
