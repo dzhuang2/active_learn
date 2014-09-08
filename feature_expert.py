@@ -29,6 +29,8 @@ class feature_expert(object):
         self.smoothing = smoothing
         self.feature_rank = ([], [])
         self.seed = seed
+        self.rg = np.random
+        self.rg.seed(seed)
         
         print '-' * 50
         print 'Starting Feature Expert Training ...'
@@ -49,21 +51,31 @@ class feature_expert(object):
         
             num_inst, num_feat = X.shape
             
-            the_top = np.zeros(num_feat)
+            the_top = np.zeros(shape=(2, num_feat))
         
             for i in range(num_inst):
                 mif = self.most_informative_feature(X[i], y[i])
                 if mif:
-                    the_top[mif] += 1
+                    the_top[y[i]][mif] += 1
             
-            feature_frequency = np.diff(X.tocsc().indptr)
+            c0_frequency = np.diff(X[np.nonzero(y == 0)[0]].tocsc().indptr)
+            c1_frequency = np.diff(X[np.nonzero(y == 1)[0]].tocsc().indptr)
+            
+            frequency = (c0_frequency, c1_frequency)
             
             include_feats = set()
             
-            min_percent = 0.10
+            min_percent = 0.05
             
             for f in range(num_feat):
-                if the_top[f] / float(feature_frequency[f]) >= min_percent:
+                top_freq = 0
+                
+                if the_top[0][f] > 0:                    
+                    top_freq = the_top[0][f] / (float(frequency[0][f]+0.001))
+                else:
+                    top_freq = the_top[1][f] / (float(frequency[1][f]+0.001))
+                
+                if top_freq >= min_percent:
                     include_feats.add(f)
             
             new_class0_feats = []
@@ -109,6 +121,8 @@ class feature_expert(object):
                     self.feature_mi_scores[f] += probs[i,j]*(np.log2(probs[i,j]) - np.log2(f_probs[i])
                                                  - np.log2(y_probs[j]))
         
+        self.feature_scores = self.feature_mi_scores
+        
         feature_rank = np.argsort(self.feature_mi_scores)[::-1]
 
         return self.classify_features(feature_rank)
@@ -119,6 +133,8 @@ class feature_expert(object):
         
         chi2_scores = chi2(X, y)
         
+        self.feature_scores = chi2_scores[0]
+        
         feature_rank = np.argsort(chi2_scores[0])[::-1]
 
         return self.classify_features(feature_rank)
@@ -127,6 +143,8 @@ class feature_expert(object):
         clf_l1 = linear_model.LogisticRegression(C=C, penalty='l1', random_state=self.seed)
         clf_l1.fit(X, y)
         self.L1_weights = clf_l1.coef_[0]
+        
+        self.feature_scores = self.L1_weights
         
         class0_features = np.nonzero(self.L1_weights < 0)[0]
         class1_features = np.nonzero(self.L1_weights > 0)[0]
@@ -141,6 +159,8 @@ class feature_expert(object):
         clf_l1.fit(X, y)
         self.L1_weights = clf_l1.coef_[0]
         self.feature_count = self.count_features(X, y)
+        
+        self.feature_scores = self.L1_weights
         
         feature_rank = np.argsort(np.absolute(self.L1_weights))[::-1]
 
@@ -183,6 +203,18 @@ class feature_expert(object):
         except IndexError:
             f = None
         return f
+    
+    def any_informative_feature(self, X, label):
+        
+        features = X.indices
+        
+        class_feats = self.rg.permutation(self.feature_rank[int(label)])          
+        
+        for f in class_feats:
+            if f in features:
+                return f
+        
+        return None
     
     def top_n_features(self, X, label, n):
         features = X.indices

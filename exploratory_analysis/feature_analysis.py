@@ -33,8 +33,11 @@ if __name__ == '__main__':
         feat_names = np.arange(num_feat)
     
     feature_frequency = np.diff(X_pool.tocsc().indptr)
+    
+    c0_frequency = np.diff(X_pool[np.nonzero(y_pool==0)[0]].tocsc().indptr)
+    c1_frequency = np.diff(X_pool[np.nonzero(y_pool==1)[0]].tocsc().indptr)
         
-    fe = feature_expert(X_pool, y_pool, metric=args.metric, smoothing=1e-6, C=args.c)
+    fe = feature_expert(X_pool, y_pool, metric=args.metric, smoothing=1e-6, C=args.c, pick_only_top=False)
     
     print '-' * 50
     
@@ -60,12 +63,14 @@ if __name__ == '__main__':
     
     print '-' * 50
     
-    print "FEATURE IDS, NAMES, FREQUENCIES, AND TOP COUNTS"
+    print "FEATURE IDS, NAMES, FREQUENCIES, SCORES, AND TOP COUNTS"
     
     print '-' * 50
     
-    print "ID\tNAME\tFREQ\tTOP_COUNT"
+    print "ID\tNAME\tFREQ\tC0_FREQ\tC1_FREQ\tSCORE\tTOP_COUNT"
     
     for f in range(num_feat):
-        print "%d\t%s\t%d\t%d" %(f, feat_names[f].encode('utf8'), feature_frequency[f], the_top[f])
+        print "%d\t%s\t%d\t%d\t%d\t%0.4f\t%d" %(f, feat_names[f].encode('utf8'), \
+                                                 feature_frequency[f], c0_frequency[f], \
+                                                 c1_frequency[f], fe.feature_scores[f], the_top[f])
     

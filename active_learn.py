@@ -69,6 +69,7 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     
     discovered_class1_features = set()
     
+    np.random.seed(seed)
            
     if selection_strategy == 'random':
         doc_pick_model = RandomStrategy(seed)
@@ -147,7 +148,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         instance_model.fit(X_train, y_train) # train instance_model
         
         for doc in training_set:
-            feature = feature_expert.most_informative_feature(X_pool[doc], y_pool[doc])
+            #feature = feature_expert.most_informative_feature(X_pool[doc], y_pool[doc])
+            feature = feature_expert.any_informative_feature(X_pool[doc], y_pool[doc])
             
             if feature:
                 feature_model.fit(feature, y_pool[doc]) # train feature_model one by one
@@ -249,7 +251,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         label = y_pool[doc_id]
         
         # Ask the expert for most informative feature given the label
-        feature = feature_expert.most_informative_feature(X_pool[doc_id], label)
+        #feature = feature_expert.most_informative_feature(X_pool[doc_id], label)
+        feature = feature_expert.any_informative_feature(X_pool[doc_id], y_pool[doc_id])
         
         # Update the instance model
         instance_model.fit(X_train, y_train)
@@ -371,7 +374,7 @@ def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, smooth
     
     feat_freq = np.diff(X_pool.tocsc().indptr)   
     
-    fe = feature_expert(X_pool, y_pool, metric, smoothing=1e-6, C=C)
+    fe = feature_expert(X_pool, y_pool, metric, smoothing=1e-6, C=C, pick_only_top=True)
     result = np.ndarray(num_trials, dtype=object)
     
     for i in range(num_trials):
