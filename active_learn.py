@@ -14,7 +14,7 @@ from feature_expert import feature_expert
 from selection_strategies import RandomBootstrap, RandomStrategy, UNCSampling, DisagreementStrategy
 from selection_strategies import CoveringStrategy, CheatingApproach, CoveringThenDisagreement, \
 CoverThenUncertainty, ReasoningThenFeatureCertainty, CoverThenFeatureCertainty, UNCForInsufficientReason, \
-UNCWithNoConflict, UNCPreferNoConflict, UNCPreferConflict
+UNCWithNoConflict, UNCPreferNoConflict, UNCPreferConflict, UNCThreeTypes
 from selection_strategies import OptimizeAUC
 
 import warnings
@@ -133,6 +133,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         doc_pick_model = UNCPreferNoConflict(reasoning_model)
     elif selection_strategy == "unc_prefer_conflict_R":
         doc_pick_model = UNCPreferConflict(reasoning_model)
+    elif selection_strategy == "unc_three_types_R":
+        doc_pick_model = UNCThreeTypes(reasoning_model)
     else:
         raise ValueError('Selection strategy: \'%s\' invalid!' % selection_strategy)
     
@@ -229,6 +231,8 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         elif selection_strategy == "unc_prefer_no_conflict_R":
             doc_id = doc_pick_model.choice(X_pool, pool_set, discovered_class0_features, discovered_class1_features, top_k=10)
         elif selection_strategy == "unc_prefer_conflict_R":
+            doc_id = doc_pick_model.choice(X_pool, pool_set, discovered_class0_features, discovered_class1_features, top_k=10)
+        elif selection_strategy == "unc_three_types_R":
             doc_id = doc_pick_model.choice(X_pool, pool_set, discovered_class0_features, discovered_class1_features, top_k=10)
         else:
             doc_id = doc_pick_model.choice(X_pool, pool_set)
@@ -657,7 +661,7 @@ if __name__ == '__main__':
                         'cheating', 'cover_then_disagree', 'cover_then_uncertainty', \
                         'optaucP', 'optaucI', 'optaucF', 'optaucR', 'reasoning_then_featureCertainty', \
                         'cover_then_uncertaintyRM', 'cover_then_featureCertainty', 'unc_insuff_R', \
-                        'unc_no_conflict_R', 'unc_prefer_no_conflict_R', 'unc_prefer_conflict_R'], default='random', \
+                        'unc_no_conflict_R', 'unc_prefer_no_conflict_R', 'unc_prefer_conflict_R', 'unc_three_types_R'], default='random', \
                         help='Document selection strategy to be used')
     parser.add_argument('-reasoningStrategy', choices=['random', 'uncertaintyIM', 'uncertaintyPM'], default='random', \
                         help='Reasoning strategy to be used for reasoning_then_disagreement')

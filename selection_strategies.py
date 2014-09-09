@@ -849,3 +849,44 @@ class UNCPreferConflict(object):
         #print "A conflict case was not found."
         
         return uncerts[0]
+
+class UNCThreeTypes(object):
+    '''
+    This class picks uncertain instances.
+    It prefers uncertain instances in the following order:
+    1. An uncertain instance that does not have any annotated feature
+    2. An uncertain instance that does not have any coflict
+    3. An uncertain instance that has a conflict.
+    '''
+    def __init__(self, model):
+        self.model = model
+
+    
+    def choice(self, X, pool, discovered_class0_feats, discovered_class1_feats, top_k=10):
+        y_probas = self.model.predict_proba(X[pool])
+        uncerts = np.array(pool)[np.argsort(np.max(y_probas, axis=1))]
+        
+        # Type 1: No annotated feature
+        for unc in uncerts[:top_k]:
+            x_feats = X[unc].indices
+            x_class0_feats = discovered_class0_feats.intersection(x_feats)
+            x_class1_feats = discovered_class1_feats.intersection(x_feats)
+            
+            if (len(x_class0_feats) == 0) and (len(x_class1_feats) == 0):
+                return unc
+        
+        # Type 2: No conflict
+        
+        for unc in uncerts[:top_k]:
+            x_feats = X[unc].indices
+            x_class0_feats = discovered_class0_feats.intersection(x_feats)
+            x_class1_feats = discovered_class1_feats.intersection(x_feats)
+            
+            conflict = (len(x_class0_feats) > 0) and (len(x_class1_feats) > 0)
+            
+            if not conflict:
+                return unc
+        
+        # Type 3
+        
+        return uncerts[0]
