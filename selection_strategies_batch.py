@@ -11,6 +11,7 @@ This file contains the following:
     CoveringFewest: pick the next document with the among the fewest number of features annotated
     CheatingApproach: pick the next document using feature expert's rankings
 '''
+
 import sys
 from time import time
 import numpy as np
@@ -30,7 +31,8 @@ def RandomBootstrap(X_pool, y_pool, size, balance, seed=0):
     print 'Initial training set size = %d' % size
     start = time()
     
-    np.random.seed(seed)
+    #np.random.seed(seed)
+    random_state = np.random.RandomState(seed=seed)
     poolsize = y_pool.shape[0]
     
     pool_set = np.arange(poolsize)
@@ -41,13 +43,13 @@ def RandomBootstrap(X_pool, y_pool, size, balance, seed=0):
         class0_indices = np.nonzero(y_pool == 0)[0]
         class1_indices = np.nonzero(y_pool == 1)[0]
         
-        class0_docs = np.random.permutation(class0_indices)[:class0_size]
-        class1_docs = np.random.permutation(class1_indices)[:class1_size]
+        class0_docs = random_state.permutation(class0_indices)[:class0_size]
+        class1_docs = random_state.permutation(class1_indices)[:class1_size]
         
         training_set = np.hstack((class0_docs, class1_docs))
         
     else: # otherwise, pick 'size' documents randomly
-        training_set = np.random.permutation(pool_set)[:size]
+        training_set = random_state.permutation(pool_set)[:size]
     
     pool_set = np.setdiff1d(pool_set, training_set)
     
@@ -108,7 +110,7 @@ class UNCPreferNoConflict(object):
                 chosen.add(uncerts[index])
             index += 1
         
-        print "Num un-conflicted: %d" %len(chosen)
+        #print "Num un-conflicted: %d" %len(chosen)
         
         if len(chosen) < k: # Not enough un-conflicted could be found
             index = 0        
@@ -149,7 +151,7 @@ class UNCPreferConflict(object):
                 chosen.add(uncerts[index])
             index += 1
         
-        print "Num conflicted: %d" %len(chosen)
+        #print "Num conflicted: %d" %len(chosen)
         
         if len(chosen) < k: # Not enough conflicted could be found
             index = 0        
@@ -194,7 +196,7 @@ class UNCThreeTypes(object):
                     unc_types.append(3)
             
         
-        print unc_types
+        #print unc_types
         
         chosen = set()
         
