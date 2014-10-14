@@ -14,14 +14,13 @@ from feature_expert import feature_expert
 from selection_strategies_batch import RandomBootstrap, RandomStrategy, UNCSampling
 from selection_strategies_batch import UNCPreferNoConflict, UNCPreferConflict, UNCThreeTypes
 
-
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 np.seterr(divide='ignore')
   
 
-def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert, \
-          selection_strategy, budget, rmw_n, rmw_a, seed=0, Debug=False):
+def learn(model_type, X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert, \
+          selection_strategy, budget, step_size, topk, w_o, w_r, seed=0, Debug=False):
     
     start = time()
     print '-' * 50
@@ -30,7 +29,9 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     
     model_scores = {'auc':[], 'accu':[]}
     
-    reasons = []
+    rationales  = set()
+    rationales_c0  = set()
+    rationales_c1  = set()
     
     num_training_samples = []
     
@@ -44,16 +45,21 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
         #feature = feature_expert.most_informative_feature(X_pool[doc_id], y_pool[doc_id])
         feature = feature_expert.any_informative_feature(X_pool[doc_id], y_pool[doc_id])
         
-        reasons.append(feature)
+        rationales.add(feature)
+
+        if y_pool[doc_id] == 0:
+            rationales_c0.add(feature)
+        else:
+            rationales_c1.add(feature)
         
         x = sp.csr_matrix(X_pool[doc_id], dtype=float)
          
         x_feats = x[0].indices
         for f in x_feats:
             if f == feature:
-                x[0,f] = rmw_a*x[0,f]
+                x[0,f] = w_r*x[0,f]
             else:
-                x[0,f] = rmw_n*x[0,f]
+                x[0,f] = w_o*x[0,f]
         
 
         
@@ -66,9 +72,13 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     
     # Train the model
     
-    model = LogisticRegression(C=1, penalty='l2')
-    model.fit(X_train, np.array(y_train))
-                
+    if model_type=='lrl2':
+        random_state = np.random.RandomState(seed=seed)
+        model = LogisticRegression(C=1, penalty='l2', random_state=random_state)
+        model.fit(X_train, np.array(y_train))
+    #elif model_type=='mnb':        
+        #model.fit(X_pool[doc_id], y_pool[doc_id], feature, rmw_n, rmw_a) 
+
         
     (accu, auc) = evaluate_model(model, X_test, y_test)
     model_scores['auc'].append(auc)
@@ -78,17 +88,39 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
     
     feature_expert.rg.seed(seed)        
     
-    doc_pick_model = RandomStrategy(seed)
+    if selection_strategy == 'random':
+        doc_pick_model = RandomStrategy(seed)
+    elif selection_strategy == 'uncertainty':
+        doc_pick_model = UNCSampling(model, feature_expert, y_pool, Debug)        
+    elif selection_strategy == "optauc":
+        doc_pick_model = OptimizeAUC(X_test, y_test, feature_expert, \
+            optimize="R", seed=seed, Debug=Debug)          
+    elif selection_strategy == "unc_prefer_no_conflict":
+        doc_pick_model = UNCPreferNoConflict(model)
+    elif selection_strategy == "unc_prefer_conflict":
+        doc_pick_model = UNCPreferConflict(model)
+    elif selection_strategy == "unc_three_types":
+        doc_pick_model = UNCThreeTypes(model)
+    else:
+        raise ValueError('Selection strategy: \'%s\' invalid!' % selection_strategy)
  
   
-    k = 10  
+    k = step_size  
 
-    while X_train.shape[0] < budget:
-        
-        doc_ids = doc_pick_model.choices(X_pool, pool_set, k)
+    while X_train.shape[0] < budget:                
+
+        # Choose a document based on the strategy chosen
+        if selection_strategy == "unc_prefer_no_conflict":
+            doc_ids = doc_pick_model.choices(X_pool, pool_set, k, rationales_c0, rationales_c1, topk)
+        elif selection_strategy == "unc_prefer_conflict":
+            doc_ids = doc_pick_model.choices(X_pool, pool_set, k, rationales_c0, rationales_c1, topk)
+        elif selection_strategy == "unc_three_types":
+            doc_ids = doc_pick_model.choices(X_pool, pool_set, k, rationales_c0, rationales_c1, topk)
+        else:
+            doc_ids = doc_pick_model.choices(X_pool, pool_set, k)
         
         if doc_ids is None or len(doc_ids) == 0:
-            break
+            break        
         
         for doc_id in doc_ids:
             # Remove the chosen document from pool and add it to the training set
@@ -98,24 +130,29 @@ def learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert
             #feature = feature_expert.most_informative_feature(X_pool[doc_id], y_pool[doc_id])
             feature = feature_expert.any_informative_feature(X_pool[doc_id], y_pool[doc_id])
             
-            reasons.append(feature)
+            rationales.add(feature)
+
+            if y_pool[doc_id] == 0:
+                rationales_c0.add(feature)
+            else:
+                rationales_c1.add(feature)
             
             x = sp.csr_matrix(X_pool[doc_id], dtype=float)
             
             x_feats = x[0].indices
             for f in x_feats:
                 if f == feature:
-                    x[0,f] = rmw_a*x[0,f]
+                    x[0,f] = w_r*x[0,f]
                 else:
-                    x[0,f] = rmw_n*x[0,f]
+                    x[0,f] = w_o*x[0,f]
             
 
             X_train = sp.vstack((X_train, x))
             y_train.append(y_pool[doc_id])
         
         # Train the model
-        
-        model = LogisticRegression(C=1, penalty='l2')
+        #random_state = np.random.RandomState(seed=seed)
+        model = LogisticRegression(C=1, penalty='l2', random_state=random_state)
         model.fit(X_train, np.array(y_train))
                     
             
@@ -135,7 +172,7 @@ def load_dataset(dataset):
         #(X_pool, y_pool, X_test, y_test) = load_data()
         #vect = CountVectorizer(min_df=0.005, max_df=1./3, binary=True, ngram_range=(1,1))
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1,1))        
-        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='C:\\Users\\mbilgic\\Desktop\\aclImdb', shuffle=True, vectorizer=vect)
+        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='./active_learn/aclImdb/', shuffle=True, vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test, vect.get_feature_names())
     elif isinstance(dataset, list) and len(dataset) == 3 and dataset[0] == '20newsgroups':
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
@@ -143,18 +180,18 @@ def load_dataset(dataset):
         load_newsgroups(class1=dataset[1], class2=dataset[2], vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test, vect.get_feature_names())
     elif dataset == ['SRAA']:
-        X_pool = pickle.load(open('SRAA_X_train.pickle', 'rb'))
-        y_pool = pickle.load(open('SRAA_y_train.pickle', 'rb'))
-        X_test = pickle.load(open('SRAA_X_test.pickle', 'rb'))
-        y_test = pickle.load(open('SRAA_y_test.pickle', 'rb'))
-        feat_names = pickle.load(open('SRAA_feature_names.pickle', 'rb'))
+        X_pool = pickle.load(open('./active_learn/SRAA/SRAA_X_train.pickle', 'rb'))
+        y_pool = pickle.load(open('./active_learn/SRAA/SRAA_y_train.pickle', 'rb'))
+        X_test = pickle.load(open('./active_learn/SRAA/SRAA_X_test.pickle', 'rb'))
+        y_test = pickle.load(open('./active_learn/SRAA/SRAA_y_test.pickle', 'rb'))
+        feat_names = pickle.load(open('./active_learn/SRAA/SRAA_feature_names.pickle', 'rb'))
         return (X_pool, y_pool, X_test, y_test, feat_names)
     elif dataset == ['nova']:
         (X_pool, y_pool, X_test, y_test) = load_nova()
         return (X_pool, y_pool, X_test, y_test, None)
     
-def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, \
-                bootstrap_size, balance, budget, rmw_n, rmw_a, seed=0, Debug=False):
+def run_trials(model_type, num_trials, dataset, selection_strategy, metric, C, alpha, \
+                bootstrap_size, balance, budget, step_size, topk, w_o, w_r, seed=0, Debug=False):
     
     (X_pool, y_pool, X_test, y_test, feat_names) = load_dataset(dataset)
     
@@ -173,9 +210,10 @@ def run_trials(num_trials, dataset, selection_strategy, metric, C, alpha, \
         trial_seed = seed + i # initialize the seed for the trial
         
         training_set, pool_set = RandomBootstrap(X_pool, y_pool, bootstrap_size, balance, trial_seed)
+        print training_set
         
-        result[i] = learn(X_pool, y_pool, X_test, y_test, training_set, pool_set, fe, \
-                          selection_strategy, budget, rmw_n, rmw_a, trial_seed, Debug)
+        result[i] = learn(model_type, X_pool, y_pool, X_test, y_test, training_set, pool_set, fe, \
+                          selection_strategy, budget, step_size, topk, w_o, w_r, trial_seed, Debug)
     
     return result, feat_names, feat_freq
 
@@ -247,7 +285,7 @@ def save_result_num_a_feat_chosen(result, feat_names, feat_freq):
         num_a_feat_chosen = result[i][-1]
         ave_num_a_feat_chosen += (num_a_feat_chosen / float(args.trials))
     
-    filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'w_a={:0.2f}'.format(args.rmw_a), 'w_n={:0.2f}'.format(args.rmw_n), "num_a_feat_chosen", 'batch-result.txt'])
+    filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'w_a={:0.2f}'.format(args.w_r), 'w_n={:0.2f}'.format(args.w_o), "num_a_feat_chosen", 'batch-result.txt'])
     
     print '-' * 50
     print 'saving result into \'%s\'' % filename
@@ -270,8 +308,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-dataset', default=['imdb'], nargs='*', \
                         help='Dataset to be used: [\'imdb\', \'20newsgroups\'] 20newsgroups must have 2 valid group names')
-    parser.add_argument('-strategy', choices=['random', 'uncertaintyIM', 'uncertaintyRM', \
-                                              'unc_prefer_no_conflict_R', 'unc_prefer_conflict_R', 'unc_three_types_R'], \
+    parser.add_argument('-strategy', choices=['random', 'uncertainty', \
+                                              'unc_prefer_no_conflict', 'unc_prefer_conflict', 'unc_three_types'], \
                         default='random', help='Document selection strategy to be used')
     parser.add_argument('-metric', choices=['mutual_info', 'chi2', 'L1'], default="L1", \
                         help='Specifying the type of feature expert to be used')
@@ -283,19 +321,22 @@ if __name__ == '__main__':
     parser.add_argument('-balance', default=True, action='store_false', help='Ensure both classes starts with equal # of docs after bootstrapping')
     parser.add_argument('-budget', type=int, default=500, help='budget in $')
     parser.add_argument('-alpha', type=float, default=1, help='alpha for the MultinomialNB instance model')
-    parser.add_argument('-rmw_n', type=float, default=1., help='The weight of non-annotated features for the reasoning model')
-    parser.add_argument('-rmw_a', type=float, default=1., help='The weight of annotated features for the reasoning model')
+    parser.add_argument('-w_o', type=float, default=1., help='The weight of all features other than rationales')
+    parser.add_argument('-w_r', type=float, default=1., help='The weight of all rationales for a document')
+    parser.add_argument('-step_size', type=int, default=1, help='number of documents to label at each iteration')
+    parser.add_argument('-topk_unc', type=int, default=20, help='number of uncertain documents to consider to differentiate between types of uncertainties')
+    parser.add_argument('-model_type', default='lrl2', help='Type of classifier to be used')
 
     args = parser.parse_args()
     
     
             
 
-    result, feat_names, feat_freq = run_trials(num_trials=args.trials, dataset=args.dataset, selection_strategy=args.strategy,\
+    result, feat_names, feat_freq = run_trials(model_type=args.model_type, num_trials=args.trials, dataset=args.dataset, selection_strategy=args.strategy,\
                 metric=args.metric, C=args.c, alpha=args.alpha, \
                 bootstrap_size=args.bootstrap, balance=args.balance, \
-                budget=args.budget, \
-                rmw_n=args.rmw_n, rmw_a=args.rmw_a, seed=args.seed, Debug=args.debug)
+                budget=args.budget, step_size=args.step_size, topk=args.topk_unc, \
+                w_o=args.w_o, w_r=args.w_r, seed=args.seed, Debug=args.debug)
     
     print result
     
@@ -306,7 +347,7 @@ if __name__ == '__main__':
         for i in range(len(nt)):
             print "%d\t%0.4f\t%0.4f" %(nt[i], accu[i], auc[i])
     
-    #save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:d}trials'.format(args.trials), 'w_a={:0.2f}'.format(args.rmw_a), 'w_n={:0.2f}'.format(args.rmw_n), 'batch-result.txt']))
-    save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'w_a={:0.2f}'.format(args.rmw_a), 'w_n={:0.2f}'.format(args.rmw_n), 'averaged', 'batch-result.txt']))
+    #save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:d}trials'.format(args.trials), 'w_a={:0.2f}'.format(args.w_r), 'w_n={:0.2f}'.format(args.w_o), 'batch-result.txt']))
+    save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'w_a={:0.2f}'.format(args.w_r), 'w_n={:0.2f}'.format(args.w_o), 'averaged', 'batch-result.txt']))
 
     #save_result_num_a_feat_chosen(result, feat_names, feat_freq)
