@@ -7,12 +7,19 @@ import matplotlib.pyplot as plt
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.feature_extraction.text import CountVectorizer
-from imdb import load_imdb, load_newsgroups, load_nova
-from models import ReasoningMNB
+from sklearn import svm
+from imdb import load_imdb, load_newsgroups, load_nova, load_ibnsina, load_creditg
+#from models import ReasoningMNB
 from sklearn import metrics
 from feature_expert import feature_expert
 from selection_strategies_batch import RandomBootstrap, RandomStrategy, UNCSampling
 from selection_strategies_batch import UNCPreferNoConflict, UNCPreferConflict, UNCThreeTypes
+from scipy import stats
+from sklearn.cross_validation import StratifiedKFold
+from sklearn.grid_search import GridSearchCV
+from sklearn.svm import SVC
+from adaptive_lr import LogisticRegressionAdaptive
+from sklearn.linear_model import SGDClassifier
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -20,7 +27,7 @@ np.seterr(divide='ignore')
   
 
 def learn(model_type, X_pool, y_pool, X_test, y_test, training_set, pool_set, feature_expert, \
-          selection_strategy, budget, step_size, topk, w_o, w_r, seed=0, Debug=False):
+          selection_strategy, budget, step_size, topk, w_o, w_r, seed=0, lr_C=1, svm_C=1, svm_gamma=0, Debug=False):
     
     start = time()
     print '-' * 50
@@ -32,6 +39,8 @@ def learn(model_type, X_pool, y_pool, X_test, y_test, training_set, pool_set, fe
     rationales  = set()
     rationales_c0  = set()
     rationales_c1  = set()
+
+    feature_expert.rg.seed(seed)
     
     num_training_samples = []
     
@@ -74,12 +83,31 @@ def learn(model_type, X_pool, y_pool, X_test, y_test, training_set, pool_set, fe
     
     if model_type=='lrl2':
         random_state = np.random.RandomState(seed=seed)
-        model = LogisticRegression(C=1, penalty='l2', random_state=random_state)
-        model.fit(X_train, np.array(y_train))
-    #elif model_type=='mnb':        
-        #model.fit(X_pool[doc_id], y_pool[doc_id], feature, rmw_n, rmw_a) 
-
+        model = LogisticRegression(C=lr_C, penalty='l2', random_state=random_state)        
+    elif model_type=='mnb':        
+        model = MultinomialNB(alpha=1)        
+    elif model_type=='svm_linear':
+        model = svm.SVC(kernel='linear', C=svm_C, probability=True)
+        #model = svm.SVC(kernel='linear', probability=True)        
+    elif model_type=='svm_rbf':
+        model = svm.SVC(kernel='rbf', gamma=svm_gamma, C=svm_C, probability=True)
+        #model = svm.SVC(kernel='rbf', probability=True)        
+    elif model_type=='svm_poly':
+        model = svm.SVC(kernel='rbf', gamma=svm_gamma, C=svm_C, probability=True)
+        #model = svm.SVC(kernel='poly', probability=True)        
+    elif model_type=='adaptive_lr':
+        random_state = np.random.RandomState(seed=seed)
+        #model = LogisticRegression(C=C, penalty='l2', random_state=random_state)
+        #model.fit(X_train, np.array(y_train))
+        model = LogisticRegressionAdaptive()   
+    elif model_type=='adaptive_svm':
+        random_state = np.random.RandomState(seed=seed)        
+        model = AdaptiveSVM()      
+    elif model_type=='SGD':
+            model = SGDClassifier(loss="log",penalty='l2', n_iter=100) 
         
+    model.fit(X_train, np.array(y_train))
+            
     (accu, auc) = evaluate_model(model, X_test, y_test)
     model_scores['auc'].append(auc)
     model_scores['accu'].append(accu)
@@ -151,10 +179,34 @@ def learn(model_type, X_pool, y_pool, X_test, y_test, training_set, pool_set, fe
             y_train.append(y_pool[doc_id])
         
         # Train the model
-        #random_state = np.random.RandomState(seed=seed)
-        model = LogisticRegression(C=1, penalty='l2', random_state=random_state)
+
+        
+        if model_type=='lrl2':
+            random_state2 = np.random.RandomState(seed=seed)        
+            model = LogisticRegression(C=lr_C, penalty='l2', random_state=random_state)                  
+        elif model_type=='mnb':        
+            model = MultinomialNB(alpha=1)            
+        elif model_type=='svm_linear':
+            model = svm.SVC(kernel='linear', C=svm_C, probability=True)
+            #model = svm.SVC(kernel='linear', probability=True)            
+        elif model_type=='svm_rbf':
+            model = svm.SVC(kernel='rbf', gamma=svm_gamma, C=svm_C, probability=True)
+            #model = svm.SVC(kernel='rbf', probability=True)            
+        elif model_type=='svm_poly':
+            model = svm.SVC(kernel='rbf', gamma=svm_gamma, C=svm_C, probability=True)
+            #model = svm.SVC(kernel='poly', probability=True)   
+        elif model_type=='adaptive_lr':
+            #random_state = np.random.RandomState(seed=seed)            
+            model = LogisticRegressionAdaptive()  
+        elif model_type=='adaptive_svm':
+            random_state = np.random.RandomState(seed=seed)        
+            model = AdaptiveSVM()   
+        elif model_type=='SGD':
+            model = SGDClassifier(loss="log",penalty='l2', n_iter=100)              
+                              
+
+        # fit the model and evaluate
         model.fit(X_train, np.array(y_train))
-                    
             
         (accu, auc) = evaluate_model(model, X_test, y_test)
         model_scores['auc'].append(auc)
@@ -172,7 +224,7 @@ def load_dataset(dataset):
         #(X_pool, y_pool, X_test, y_test) = load_data()
         #vect = CountVectorizer(min_df=0.005, max_df=1./3, binary=True, ngram_range=(1,1))
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1,1))        
-        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='./active_learn/aclImdb/', shuffle=True, vectorizer=vect)
+        X_pool, y_pool, X_test, y_test, _, _, = load_imdb(path='./aclImdb/', shuffle=True, vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test, vect.get_feature_names())
     elif isinstance(dataset, list) and len(dataset) == 3 and dataset[0] == '20newsgroups':
         vect = CountVectorizer(min_df=5, max_df=1.0, binary=True, ngram_range=(1, 1))
@@ -180,21 +232,28 @@ def load_dataset(dataset):
         load_newsgroups(class1=dataset[1], class2=dataset[2], vectorizer=vect)
         return (X_pool, y_pool, X_test, y_test, vect.get_feature_names())
     elif dataset == ['SRAA']:
-        X_pool = pickle.load(open('./active_learn/SRAA/SRAA_X_train.pickle', 'rb'))
-        y_pool = pickle.load(open('./active_learn/SRAA/SRAA_y_train.pickle', 'rb'))
-        X_test = pickle.load(open('./active_learn/SRAA/SRAA_X_test.pickle', 'rb'))
-        y_test = pickle.load(open('./active_learn/SRAA/SRAA_y_test.pickle', 'rb'))
-        feat_names = pickle.load(open('./active_learn/SRAA/SRAA_feature_names.pickle', 'rb'))
+        X_pool = pickle.load(open('./SRAA_X_train.pickle', 'rb'))
+        y_pool = pickle.load(open('./SRAA_y_train.pickle', 'rb'))
+        X_test = pickle.load(open('./SRAA_X_test.pickle', 'rb'))
+        y_test = pickle.load(open('./SRAA_y_test.pickle', 'rb'))
+        feat_names = pickle.load(open('./SRAA_feature_names.pickle', 'rb'))
         return (X_pool, y_pool, X_test, y_test, feat_names)
     elif dataset == ['nova']:
         (X_pool, y_pool, X_test, y_test) = load_nova()
         return (X_pool, y_pool, X_test, y_test, None)
+    elif dataset == ['ibnsina']:
+        (X_pool, y_pool, X_test, y_test) = load_ibnsina()
+        return (X_pool, y_pool, X_test, y_test, None)
+    elif dataset == ['creditg']:
+        (X_pool, y_pool, X_test, y_test) = load_creditg()
+        return (X_pool, y_pool, X_test, y_test, None)
     
 def run_trials(model_type, num_trials, dataset, selection_strategy, metric, C, alpha, \
-                bootstrap_size, balance, budget, step_size, topk, w_o, w_r, seed=0, Debug=False):
+                bootstrap_size, balance, budget, step_size, topk, w_o, w_r, seed=0, lr_C=1, svm_C=1, svm_gamma=0, Debug=False):
     
     (X_pool, y_pool, X_test, y_test, feat_names) = load_dataset(dataset)
-    
+
+        
     if not feat_names:
         feat_names = np.arange(X_pool.shape[1])
     
@@ -210,10 +269,36 @@ def run_trials(model_type, num_trials, dataset, selection_strategy, metric, C, a
         trial_seed = seed + i # initialize the seed for the trial
         
         training_set, pool_set = RandomBootstrap(X_pool, y_pool, bootstrap_size, balance, trial_seed)
-        print training_set
-        
+
+        # In order to get the best parameters
+        if 0:
+            # Train classifier
+            #
+            # For an initial search, a logarithmic grid with basis
+            # 10 is often helpful. Using a basis of 2, a finer
+            # tuning can be achieved but at a much higher cost.
+
+            C_range = 10.0 ** np.arange(-5, 9)
+            gamma_range = 10.0 ** np.arange(-5, 5)
+            param_grid = dict(gamma=gamma_range, C=C_range)
+            cv = StratifiedKFold(y=y_pool, n_folds=5)
+            grid = GridSearchCV(SVC(kernel='poly'), param_grid=param_grid, cv=cv)
+            grid.fit(X_pool, np.array(y_pool))
+            print("The best classifier is: ", grid.best_estimator_)
+
+            # Now we need to fit a classifier for all parameters in the 2d version
+            # (we use a smaller set of parameters here because it takes a while to train)
+            C_2d_range = [1, 1e2, 1e4]
+            gamma_2d_range = [1e-1, 1, 1e1]
+            classifiers = []
+            for C in C_2d_range:
+                for gamma in gamma_2d_range:
+                    clf = SVC(C=C, gamma=gamma)
+                    clf.fit(X_pool, np.array(y_pool))
+                    classifiers.append((C, gamma, clf))
+                
         result[i] = learn(model_type, X_pool, y_pool, X_test, y_test, training_set, pool_set, fe, \
-                          selection_strategy, budget, step_size, topk, w_o, w_r, trial_seed, Debug)
+                          selection_strategy, budget, step_size, topk, w_o, w_r, trial_seed, lr_C, svm_C, svm_gamma, Debug)
     
     return result, feat_names, feat_freq
 
@@ -277,6 +362,7 @@ def evaluate_model(model, X_test, y_test):
     accu = metrics.accuracy_score(y_test, pred_y)
     return (accu, auc)
 
+
 def save_result_num_a_feat_chosen(result, feat_names, feat_freq):
     
     ave_num_a_feat_chosen = np.zeros(len(feat_names))
@@ -325,7 +411,10 @@ if __name__ == '__main__':
     parser.add_argument('-w_r', type=float, default=1., help='The weight of all rationales for a document')
     parser.add_argument('-step_size', type=int, default=1, help='number of documents to label at each iteration')
     parser.add_argument('-topk_unc', type=int, default=20, help='number of uncertain documents to consider to differentiate between types of uncertainties')
-    parser.add_argument('-model_type', default='lrl2', help='Type of classifier to be used')
+    parser.add_argument('-model_type', choices=['lrl2', 'adaptive_lr', 'mnb', 'svm_linear', 'svm_rbf', 'svm_poly', 'svm_linear_adaptive', 'SGD'], default='lrl2', help='Type of classifier to be used')
+    parser.add_argument('-lr_C', type=float, default=1, help='Penalty term for the logistic regression classifier')
+    parser.add_argument('-svm_C', type=float, default=1, help='Penalty term for the SVM classifier')
+    parser.add_argument('-svm_gamma', type=float, default=1, help='gamma for SVM')
 
     args = parser.parse_args()
     
@@ -336,7 +425,7 @@ if __name__ == '__main__':
                 metric=args.metric, C=args.c, alpha=args.alpha, \
                 bootstrap_size=args.bootstrap, balance=args.balance, \
                 budget=args.budget, step_size=args.step_size, topk=args.topk_unc, \
-                w_o=args.w_o, w_r=args.w_r, seed=args.seed, Debug=args.debug)
+                w_o=args.w_o, w_r=args.w_r, seed=args.seed, lr_C=args.lr_C, svm_C=args.svm_C, svm_gamma=args.svm_gamma, Debug=args.debug)
     
     print result
     
@@ -348,6 +437,7 @@ if __name__ == '__main__':
             print "%d\t%0.4f\t%0.4f" %(nt[i], accu[i], auc[i])
     
     #save_result(result, filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, '{:d}trials'.format(args.trials), 'w_a={:0.2f}'.format(args.w_r), 'w_n={:0.2f}'.format(args.w_o), 'batch-result.txt']))
-    save_result(average_results(result), filename='_'.join(['_'.join(args.dataset), args.strategy, args.metric, 'w_a={:0.2f}'.format(args.w_r), 'w_n={:0.2f}'.format(args.w_o), 'averaged', 'batch-result.txt']))
+    save_result(average_results(result), filename='_'.join(['lr_C={:5.5f}'.format(args.lr_C), 'SVM_C={:5.5f}'.format(args.svm_C),'_'.join(args.dataset), args.strategy, args.metric, 'w_r={:2.5f}'.format(args.w_r), 'w_o={:2.5f}'.format(args.w_o), 'averaged', 'batch-result.txt']))
+    #save_result(average_results(result), filename='_'.join([args.model_type, 'Results\\','lr_C={:5.5f}'.format(args.lr_C), 'SVM_C={:5.5f}'.format(args.svm_C),'_'.join(args.dataset), args.strategy, args.metric, 'w_r={:2.5f}'.format(args.w_r), 'w_o={:2.5f}'.format(args.w_o), 'averaged', 'batch-result.txt']))
 
     #save_result_num_a_feat_chosen(result, feat_names, feat_freq)
