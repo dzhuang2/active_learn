@@ -61,7 +61,7 @@ class RandomStrategy(object):
     def __init__(self, seed=0):
         self.rgen = np.random.RandomState(seed)
 
-    def choices(self, X, pool, k): 
+    def choices(self, model, X, pool, k): 
         return self.rgen.permutation(pool)[:k]
         
 
